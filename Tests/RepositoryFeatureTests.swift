@@ -1456,8 +1456,10 @@ enum RepositoryFeatureTests {
         suite.expect(uninstallScriptSource.contains("SleepDisabled"),
                "script uninstall reads the sleep setting back for itself")
         suite.expect(uninstallScriptSource.contains("defaults read \"$BUNDLE\" \(DefaultsKey.spacesOrderRestore)")
+                && uninstallScriptSource.contains("defaults read \"$BUNDLE\" \(DefaultsKey.spacesOrderRestartPending)")
                 && uninstallScriptSource.contains("defaults read com.apple.dock mru-spaces")
                 && uninstallScriptSource.contains("spaces_stuck == 0")
+                && uninstallScriptSource.contains("spaces_unloaded == 0")
                 && !uninstallScriptSource.contains("defaults write com.apple.dock")
                 && !uninstallScriptSource.contains("killall"),
                "script uninstall reads Space rearranging back for itself and never changes it")

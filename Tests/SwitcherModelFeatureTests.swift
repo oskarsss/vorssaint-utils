@@ -1848,8 +1848,9 @@ enum SwitcherModelFeatureTests {
                "mouse acceleration control is opt-in and visible in the panel when installed")
         suite.expect(registeredDefaults[DefaultsKey.spacesOrderEnabled] as? Bool == false
                 && registeredDefaults[DefaultsKey.panelControlSpacesOrder] as? Bool == true
-                && registeredDefaults[DefaultsKey.spacesOrderRestore] == nil,
-               "fixed Space order is opt-in, visible in the panel when installed, and its restore marker is never registered")
+                && registeredDefaults[DefaultsKey.spacesOrderRestore] == nil
+                && registeredDefaults[DefaultsKey.spacesOrderRestartPending] == nil,
+               "fixed Space order is opt-in, visible in the panel when installed, and its restore state is never registered")
         suite.expect(registeredDefaults[DefaultsKey.linearScrollEnabled] as? Bool == false
                 && registeredDefaults[DefaultsKey.linearScrollLines] as? Int
                     == ScrollWheelSupport.defaultLinesPerNotch
