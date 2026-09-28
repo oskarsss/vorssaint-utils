@@ -26,6 +26,7 @@ final class MenuPanelFocus: ObservableObject {
     @Published private(set) var request: MenuPanelFocusRequest?
     @Published private(set) var activeMetric: MetricDetailKind?
     @Published private(set) var isSwitchingMetricAnchor = false
+    @Published private(set) var popoverIsVisible = false
     private var serial = 0
 
     private init() {}
@@ -54,6 +55,11 @@ final class MenuPanelFocus: ObservableObject {
 
     func setSwitchingMetricAnchor(_ switching: Bool) {
         isSwitchingMetricAnchor = switching
+    }
+
+    func setPopoverVisible(_ visible: Bool) {
+        guard popoverIsVisible != visible else { return }
+        popoverIsVisible = visible
     }
 }
 
@@ -321,7 +327,12 @@ struct MenuPanelView: View {
         case .network: if showNetwork { NetworkSection(collapsible: collapsible) }
         case .disk: if showDisk { DiskSection(collapsible: collapsible) }
         case .power: if showPower { PowerSection(collapsible: collapsible) }
-        case .fanControl: if showFanControl { FanControlSection(collapsible: collapsible) }
+        case .fanControl:
+            // The popover retains its host after closing; detach the curve editor
+            // so cooling heartbeats cannot keep laying out an unseen panel.
+            if showFanControl, notchSize != nil || panelFocus.popoverIsVisible {
+                FanControlSection(collapsible: collapsible)
+            }
         case .utilities: UtilitiesSection(collapsible: collapsible, startCleaning: startCleaning)
         case .controls: QuickControlsSection(collapsible: collapsible)
         case .toggles: QuickTogglesSection(collapsible: collapsible)
@@ -1086,7 +1097,7 @@ struct UtilitiesSection: View {
 }
 
 private enum ControlPanelItem: String, PanelOrderItem, Identifiable {
-    case mouseScroll, focusFollowsMouse, mouseAcceleration, mouseNavigation, switcher, cutPaste, autoQuit, shelf, windowMaximize, dockPreview, keyDebounce,
+    case mouseScroll, linearScroll, focusFollowsMouse, mouseAcceleration, mouseNavigation, switcher, cutPaste, autoQuit, shelf, windowMaximize, dockPreview, keyDebounce,
          dockClick, dockClickHide, dockClickCycle, middleClick, textSnippets, radialMenu, mouseButtonShortcuts, superKey,
          mouseClickDebounce, notch, spacesOrder
 
@@ -1097,6 +1108,7 @@ private enum ControlPanelItem: String, PanelOrderItem, Identifiable {
     var feature: AppFeature {
         switch self {
         case .mouseScroll: return .scrollInverter
+        case .linearScroll: return .linearScroll
         case .focusFollowsMouse: return .focusFollowsMouse
         case .mouseAcceleration: return .mouseAcceleration
         case .mouseNavigation: return .mouseNavigation
@@ -1132,7 +1144,7 @@ private enum ControlCategory: String, CaseIterable, Identifiable {
         case .switcher, .dockPreview, .dockClick, .dockClickHide, .dockClickCycle, .windowMaximize, .autoQuit, .notch,
              .spacesOrder:
             return .windows
-        case .mouseScroll, .focusFollowsMouse, .mouseAcceleration, .mouseNavigation, .mouseButtonShortcuts, .middleClick, .keyDebounce,
+        case .mouseScroll, .linearScroll, .focusFollowsMouse, .mouseAcceleration, .mouseNavigation, .mouseButtonShortcuts, .middleClick, .keyDebounce,
              .textSnippets, .radialMenu, .superKey, .mouseClickDebounce:
             return .inputDevices
         case .cutPaste, .shelf:
@@ -1182,12 +1194,14 @@ struct QuickControlsSection: View {
     @AppStorage(DefaultsKey.mouseSpacesGestureEnabled) private var spacesEnabled = false
     @AppStorage(DefaultsKey.superKeyEnabled) private var superKeyEnabled = false
     @AppStorage(DefaultsKey.mouseAccelerationDisabled) private var mouseAccelerationDisabled = false
+    @AppStorage(DefaultsKey.linearScrollEnabled) private var linearScrollEnabled = false
     @AppStorage(DefaultsKey.mouseClickDebounceEnabled) private var mouseClickDebounceEnabled = false
     @AppStorage(DefaultsKey.superKeyModifiers) private var superKeyModifierStorage =
         SuperKeySupport.defaultModifierStorageValue
     @AppStorage(DefaultsKey.superKeySource) private var superKeySourceRaw =
         SuperKeySource.capsLock.rawValue
     @AppStorage(DefaultsKey.panelControlMouseScroll) private var showScroll = true
+    @AppStorage(DefaultsKey.panelControlLinearScroll) private var showLinearScroll = true
     @AppStorage(DefaultsKey.panelControlFocusFollowsMouse) private var showFocusFollowsMouse = true
     @AppStorage(DefaultsKey.panelControlMouseNavigation) private var showMouseNavigation = true
     @AppStorage(DefaultsKey.panelControlSwitcher) private var showSwitcher = true
@@ -1308,6 +1322,7 @@ struct QuickControlsSection: View {
     private func isEnabled(_ item: ControlPanelItem) -> Bool {
         switch item {
         case .mouseScroll: return scrollDirectionEnabled
+        case .linearScroll: return linearScrollEnabled
         case .focusFollowsMouse: return focusFollowsMouseEnabled
         case .mouseAcceleration: return mouseAccelerationDisabled
         case .mouseNavigation: return mouseNavigationEnabled
@@ -1387,6 +1402,7 @@ struct QuickControlsSection: View {
     private func isVisible(_ item: ControlPanelItem) -> Bool {
         switch item {
         case .mouseScroll: return showScroll
+        case .linearScroll: return showLinearScroll
         case .focusFollowsMouse: return showFocusFollowsMouse
         case .mouseAcceleration: return showMouseAcceleration
         case .mouseNavigation: return showMouseNavigation
@@ -1427,6 +1443,22 @@ struct QuickControlsSection: View {
                            permissionButtonTitle: l10n.s.permissionRequest,
                            permissionAction: accessibilityPermissionAction(scrollDirectionEnabled))
                 .onChange(of: scrollDirectionEnabled) { _, enabled in
+                    ScrollInverter.shared.syncWithPreferences()
+                    requestAccessibilityIfNeeded(enabled)
+                }
+        case .linearScroll:
+            PanelToggleRow(title: l10n.s.linearScrollName,
+                           caption: caption(l10n.s.linearScrollCaption,
+                                            needsAccessibility: linearScrollEnabled),
+                           systemImage: "arrow.up.and.down.text.horizontal",
+                           isOn: $linearScrollEnabled,
+                           isEditing: editing,
+                           showsDragHandle: true,
+                           visibility: $showLinearScroll,
+                           needsAttention: linearScrollEnabled && !permissions.accessibility,
+                           permissionButtonTitle: l10n.s.permissionRequest,
+                           permissionAction: accessibilityPermissionAction(linearScrollEnabled))
+                .onChange(of: linearScrollEnabled) { _, enabled in
                     ScrollInverter.shared.syncWithPreferences()
                     requestAccessibilityIfNeeded(enabled)
                 }
@@ -1850,6 +1882,7 @@ struct QuickControlsSection: View {
         showMouseButtonShortcuts = true
         showSuperKey = true
         showMouseAcceleration = true
+        showLinearScroll = true
         showMouseClickDebounce = true
         windowsExpanded = false
         inputExpanded = false

@@ -20,6 +20,7 @@ struct QuickToolsSettings: View {
     @AppStorage(DefaultsKey.scratchpadRetention) private var scratchpadRetention = ScratchpadRetention.never.rawValue
     @AppStorage(DefaultsKey.scratchpadCloseOnClickOutside) private var scratchpadCloseOnClickOutside = true
     @AppStorage(DefaultsKey.scratchpadBackgroundOpacity) private var scratchpadBackgroundOpacity = 0.0
+    @AppStorage(DefaultsKey.scratchpadTextSize) private var scratchpadTextSize = ScratchpadSupport.defaultTextSize
     @AppStorage(DefaultsKey.micMuteMenuBarIndicator) private var micMenuBarIndicator = false
     @AppStorage(DefaultsKey.cleaningModeKeepScreenVisible) private var cleaningModeKeepScreenVisible = false
 
@@ -54,7 +55,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(l10n.s.launcherName)
                 }
-                .settingsSectionAnchor(.quickLauncher)
+                .settingsFormSectionAnchor(.quickLauncher)
             }
 
             if AppFeature.quickToggles.isAvailable {
@@ -95,7 +96,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(FeatureStrings.quickToggles(l10n.language).pageTitle)
                 }
-                .settingsSectionAnchor(.quickToggles)
+                .settingsFormSectionAnchor(.quickToggles)
                 .onAppear { brightness.refreshKeyboardLight() }
             }
 
@@ -135,7 +136,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(l10n.s.micMuteName)
                 }
-                .settingsSectionAnchor(.micMute)
+                .settingsFormSectionAnchor(.micMute)
             }
 
             if AppFeature.cameraPreview.isAvailable {
@@ -168,7 +169,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(FeatureStrings.cameraPreview(l10n.language).pageTitle)
                 }
-                .settingsSectionAnchor(.cameraPreview)
+                .settingsFormSectionAnchor(.cameraPreview)
             }
 
             if AppFeature.wallpaper.isAvailable {
@@ -187,7 +188,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(FeatureStrings.wallpaper(l10n.language).pageTitle)
                 }
-                .settingsSectionAnchor(.wallpaper)
+                .settingsFormSectionAnchor(.wallpaper)
             }
 
             if AppFeature.scratchpad.isAvailable {
@@ -221,6 +222,18 @@ struct QuickToolsSettings: View {
                             ScratchpadService.shared.outsideClickPreferenceDidChange()
                         }
                     VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(FeatureStrings.scratchpad(l10n.language).textSize)
+                            Spacer()
+                            Text("\(Int(ScratchpadSupport.sanitizedTextSize(scratchpadTextSize)))")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: scratchpadTextSizeBinding,
+                               in: ScratchpadSupport.textSizeRange,
+                               step: 1)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(FeatureStrings.scratchpad(l10n.language).backgroundOpacity)
                         Slider(value: scratchpadBackgroundOpacityBinding,
                                in: ScratchpadSupport.backgroundOpacityRange,
@@ -249,7 +262,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(FeatureStrings.scratchpad(l10n.language).pageTitle)
                 }
-                .settingsSectionAnchor(.scratchpad)
+                .settingsFormSectionAnchor(.scratchpad)
             }
 
             if AppFeature.cleaningMode.isAvailable {
@@ -269,7 +282,7 @@ struct QuickToolsSettings: View {
                 } header: {
                     Text(l10n.s.cleaningMenuItem)
                 }
-                .settingsSectionAnchor(.cleaningMode)
+                .settingsFormSectionAnchor(.cleaningMode)
             }
         }
         .formStyle(.grouped)
@@ -279,6 +292,13 @@ struct QuickToolsSettings: View {
         Binding(
             get: { ScratchpadSupport.sanitizedBackgroundOpacity(scratchpadBackgroundOpacity) },
             set: { scratchpadBackgroundOpacity = ScratchpadSupport.sanitizedBackgroundOpacity($0) }
+        )
+    }
+
+    private var scratchpadTextSizeBinding: Binding<Double> {
+        Binding(
+            get: { ScratchpadSupport.sanitizedTextSize(scratchpadTextSize) },
+            set: { scratchpadTextSize = ScratchpadSupport.sanitizedTextSize($0) }
         )
     }
 }
