@@ -26,6 +26,9 @@ enum SpacesOrderSupport {
     /// Marker values: the state to put back when the feature lets go.
     static let restoreAbsent = "absent"
     static let restoreOn = "on"
+    /// Rearranging was already off when the feature turned on, so nothing is
+    /// put back. The marker still shows that the feature holds it.
+    static let restoreOff = "off"
     /// A live change counts only once the preference reads back changed,
     /// checked every 100 ms for up to two seconds.
     static let confirmAttempts = 20
@@ -43,6 +46,9 @@ enum SpacesOrderSupport {
         case none
         /// Save `marker`, then turn rearranging off.
         case hold(marker: String)
+        /// Rearranging is already off: save `restoreOff` without touching the
+        /// Dock, so turning it back on later still lets go.
+        case remember
         /// Turn rearranging back on, removing the key when it was missing
         /// before, then clear the marker.
         case release(removeKey: Bool)
@@ -113,10 +119,11 @@ enum SpacesOrderSupport {
         }
     }
 
-    /// One step toward the wanted state. A marker means the feature turned
-    /// rearranging off, so finding it on again while the feature is on is the
-    /// user taking back control in System Settings. The feature then lets go
-    /// instead of turning it off over their choice.
+    /// One step toward the wanted state. A marker means the feature holds
+    /// rearranging off, whether it turned it off or found it off, so finding it
+    /// on again while the feature is on is the user taking back control in
+    /// System Settings. The feature then lets go instead of turning it off over
+    /// their choice.
     ///
     /// `dockRuns` is set while a Dock restart is owed and its journal still
     /// holds. The preference is then the feature's own write, which the Dock
@@ -127,9 +134,10 @@ enum SpacesOrderSupport {
                      dockRuns: DockState? = nil) -> Step {
         if let dockRuns {
             let reads = DockState(current)
-            // Without a marker nothing is owed back, so the Dock only has to
-            // catch up with the preference.
-            let target: DockState? = wanted ? .fixed : (marker == nil ? reads : .rearranging)
+            // Without a marker, or with one that put nothing aside, nothing is
+            // owed back, so the Dock only has to catch up with the preference.
+            let owesBack = marker != nil && marker != restoreOff
+            let target: DockState? = wanted ? .fixed : (owesBack ? .rearranging : reads)
             if let reads, reads != dockRuns, reads == target { return .restart }
             let next = step(wanted: wanted, current: current, marker: marker)
             if next == .letGo, let marker { return .hold(marker: marker) }
@@ -137,13 +145,17 @@ enum SpacesOrderSupport {
         }
         if wanted {
             switch current {
-            case .off, .unsupported: return .none
+            case .off: return marker == nil ? .remember : .none
+            case .unsupported: return .none
             case .absent, .on:
                 guard marker == nil else { return .letGo }
                 return .hold(marker: current == .absent ? restoreAbsent : restoreOn)
             }
         }
         guard let marker else { return .none }
+        // Rearranging was already off when the feature turned on, so whatever
+        // it reads now is the user's own.
+        guard marker != restoreOff else { return .forget }
         return current == .off ? .release(removeKey: marker == restoreAbsent) : .forget
     }
 }
@@ -227,8 +239,9 @@ final class SpacesOrderHold {
         watchTokens.forEach { $0.center.removeObserver($0.token) }
     }
 
-    /// True while a changed setting is still owed back to the user, or the
-    /// Dock still owes the restart that reads a written one.
+    /// True while the feature holds the setting, whether or not anything is
+    /// owed back to the user, or the Dock still owes the restart that reads a
+    /// written one.
     static var hasPendingRestore: Bool { isOwed(in: .standard) }
 
     private static func isOwed(in defaults: UserDefaults) -> Bool {
@@ -369,6 +382,13 @@ final class SpacesOrderHold {
                 if marker == nil, !result.liveAccepted, !result.wrote { clearMarker() }
                 return false
             }
+            return true
+        case .remember:
+            defaults.set(SpacesOrderSupport.restoreOff, forKey: DefaultsKey.spacesOrderRestore)
+            defaults.synchronize()
+            // The Dock already runs a fixed order, or the step would have
+            // restarted it first, so no restart is owed.
+            if held != nil { saveJournal(nil) }
             return true
         case .release(let removeKey):
             let result = apply(rearranging: true, removeKey: removeKey, held: held)
