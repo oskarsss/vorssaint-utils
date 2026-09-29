@@ -1083,6 +1083,8 @@ extension Strings {
         linearScrollLinesLabel: "每格行数",
         shelfClearOnClose: "关闭时清空",
         shelfClearOnCloseCaption: "仅在点按关闭按钮时清空暂存架。自动隐藏或收起时会保留项目。",
+        shelfShortcutFinderSelection: "使用快捷键添加访达中的所选项",
+        shelfShortcutFinderSelectionCaption: "访达位于前台时，快捷键会打开暂存架并放入所选文件。未选择任何内容时照常打开。",
         spacesOrderName: "固定空间顺序",
         spacesOrderCaption: "阻止 macOS 按最近使用情况重新排列空间，让它们保持你设定的顺序。关闭此选项后会恢复之前的设置。为应用更改，Dock 可能会重新启动一次。"
     )

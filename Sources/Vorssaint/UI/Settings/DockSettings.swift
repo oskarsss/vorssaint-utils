@@ -53,7 +53,8 @@ struct DockSettings: View {
                         .settingsSectionAnchor(.spacesOrder, cornerRadius: 16)
                 }
                 if AppFeature.dockPreview.isAvailable {
-                    WindowPreviewsCard(sizeKey: DefaultsKey.previewSize)
+                    WindowPreviewsCard(sizeKey: DefaultsKey.previewSize,
+                                       excludedAppsKey: DefaultsKey.windowPreviewExcludedApps)
                 }
                 if needsAccessibility, !permissions.accessibility {
                     SettingsCard(title: l10n.s.permissionRequired) {

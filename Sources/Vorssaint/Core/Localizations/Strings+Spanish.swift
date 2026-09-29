@@ -1083,6 +1083,8 @@ extension Strings {
         linearScrollLinesLabel: "Líneas por paso",
         shelfClearOnClose: "Borrar al cerrar",
         shelfClearOnCloseCaption: "Vacía el estante solo al hacer clic en el botón de cierre. Ocultarlo automáticamente y contraerlo conservan los ítems.",
+        shelfShortcutFinderSelection: "Añadir la selección del Finder con el atajo",
+        shelfShortcutFinderSelectionCaption: "Con el Finder al frente, el atajo abre el estante con los archivos seleccionados ya dentro. Sin selección, se abre como siempre.",
         spacesOrderName: "Mantener los Espacios en un orden fijo",
         spacesOrderCaption: "Evita que macOS reorganice los Espacios según el uso más reciente, para que sigan en el orden que elegiste. Tu ajuste anterior vuelve al desactivar esta opción. El Dock puede reiniciarse una vez para aplicar el cambio."
     )
