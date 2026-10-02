@@ -402,7 +402,7 @@ struct NotchSettings: View {
             if permissions.calendarAccess == .fullAccess { NotchCalendarSelection() }
         case .timer:
             let activities = FeatureStrings.notchActivities(l10n.language)
-            switchRow("eye.slash", activities.hideTimerCountdown, caption: activities.hideTimerCountdownHint,
+            switchRow("eye.slash", activities.hideTimerCountdown,
                       isOn: $hideTimerCountdown)
                 .disabled(!AppFeature.notchTimer.isAvailable)
             switchRow("speaker.wave.2", activities.soundEnabled, isOn: $timerSoundEnabled)
