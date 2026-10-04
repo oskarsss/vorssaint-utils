@@ -166,6 +166,11 @@ def main():
                         "    func syncWithPreferences(", "    private func start(", "    func stop(",
                         "    private func handleLaunch(", "    private func handleMediaKeyEvent("])
           + "}\n}\n")
+    write("RadialMenuProfileDeletion.swift", "import Foundation\n"
+          + "extension RadialMenuProfileDeletionContract {\nfinal class Settings: Fixture {\n"
+          + declaration("Sources/Vorssaint/UI/Settings/RadialMenuSettings.swift",
+                        "    private func deleteProfile(").replace("private ", "", 1)
+          + "}\n}\n")
     fan_control = "Sources/Vorssaint/Services/FanControl/FanControlService.swift"
     write("FanControlResume.swift", "import Foundation\n"
           + "extension FanControlResumeContract {\nfinal class Service: Fixture {\n"
@@ -205,6 +210,14 @@ def main():
                         "    func restoreBorrowedInputSource(",
                         "    var hasBorrowedInputSource:"])
           + "}\n}\n")
+    write("CommandBarKillProcessOrder.swift", "import Foundation\n"
+          + "extension CommandBarKillProcessOrderContract {\nfinal class Service: Fixture {\n"
+          + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarService.swift",
+                        "    private func loadKillProcessEntries(").replace("private func", "func", 1)
+          + "}\n}\nextension CommandBarKillProcessOrderContract.Processes {\n"
+          + declaration("Sources/Vorssaint/Services/KillProcess/KillProcessService.swift",
+                        "    var sortedEntries:")
+          + "}\n")
     write("CommandBarTermination.swift", "import AppKit\nimport Foundation\n"
           + "extension CommandBarTerminationContract {\nfinal class Host: Fixture {\n"
           + declaration("Sources/Vorssaint/App/AppDelegate.swift", "    func applicationShouldTerminate(")
@@ -591,7 +604,7 @@ def main():
         "    private var hiddenUntilHover:", "    var fullscreenCompact:", "    var idleContent:", "    var hasMusicActivity:", "    var compactActivity:",
         "    var compactActivityGeometry:", "    private func compactGeometry(", "    var compactActivities:",
         "    var compactCompanion:",
-        "    var surfaceSize:", "    func collapse(",
+        "    var surfaceSize:", "    var surfaceShift:", "    func collapse(",
         "    private func detachCaptureIfClosingOnCollapse(", "    func endCaptureControls(",
         "    private func syncVisibleConsumers(", "    private func releaseMonitor("])
     for call in ["NotchSupport.controls", "NotchSupport.watchesMusicActivity", "NotchSupport.idleContent"]:
@@ -675,6 +688,7 @@ def main():
           + declaration(notch, "    var acceptsSystemFeedback:")
           + declaration(notch, "    var showsSystemFeedback:")
           + declaration(notch, "    var usesGlassSurface:")
+          + declaration(notch, "    var lingeringMusic:")
           + declaration(notch, "    var expandedGeometry:").replace("var expandedGeometry", "override var expandedGeometry", 1)
           + declaration(notch, "    private func compactMusicTransition(").replace("private func", "func", 1)
           + declaration(notch, "    private func rememberPresentedMusic(").replace("private func", "func", 1)
@@ -969,7 +983,7 @@ def main():
           + "final class NotchService {\nstatic var shared = NotchService()\n"
           + "var presentationWindow: NSPanel? = NSPanel()\nvar acceptsSystemFeedback = true\n"
           + "var expanded = true\nvar selected = NotchModule.captures\nvar showingAppPanel = false\n"
-          + "var showingSections = false\nvar selectedMetric: Int?\nvar captureControls: Int?\n"
+          + "var showingSections = false\nvar showingCommandBar = false\nvar selectedMetric: Int?\nvar captureControls: Int?\n"
           + "var captureID: UUID?\nvar captureContent: Bool? = true\n"
           + declaration("Sources/Vorssaint/Services/Notch/NotchService.swift", "    func isCaptureVisible(")
           + "}\nfinal class Preview {\n"
