@@ -1301,6 +1301,24 @@ def main():
             .replace("private func", "func", 1)
           + "}\n}\n")
 
+    spaces_order = "Sources/Vorssaint/Services/SpacesOrder/SpacesOrderHold.swift"
+    write("SpacesOrderRequests.swift", "import Foundation\nimport os\n"
+          + "extension SpacesOrderRequestContract {\nfinal class Host: Fixture {\n"
+          + "".join(declaration(spaces_order, prefix).replace("private ", "", 1)
+                    .replace(", privacy: .public", "")
+                    .replace("    func saveJournal(", "    @discardableResult\n    func saveJournal(", 1)
+                    for prefix in [
+              "    private func newRequest()", "    private func currentRequest()",
+              "    private func awaitingLetGoPersistence()", "    private static func isOwed(",
+              "    private var journal:", "    private func heldJournal(",
+              "    func syncWithPreferences()", "    func letGoIfRearrangingReturned()",
+              "    private func letGoIfRearrangingReturnedOnQueue(", "    func restoreForRemoval()",
+              "    func reconcile(wanted:", "    private func reconcileOnQueue(",
+              "    private func letGo(generation:", "    private func apply(",
+              "    private func saveMarker(", "    private func clearMarker()",
+              "    private func saveJournal("])
+          + "}\n}\n")
+
     self_uninstall = "Sources/Vorssaint/Services/SelfUninstall.swift"
     write("SelfUninstallRemoval.swift", "import Foundation\n\nextension SelfUninstallContract {\nenum Host {\n"
           + "static let bundleID = \"test\"\n"
