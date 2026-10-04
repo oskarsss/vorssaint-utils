@@ -210,6 +210,24 @@ enum SpacesOrderRequestContract {
                      && publication.dock.writes.isEmpty,
                      "a successful retry finishes cleanup without changing the external choice")
 
+        let reenabled = Host(marker: on)
+        reenabled.defaults.synchronizeSucceeds = false
+        _ = reenabled.letGoIfRearrangingReturned()
+        DispatchQueue.main.flushOne()
+        reenabled.defaults.set(true, forKey: enabled)
+        reenabled.defaults.synchronizeSucceeds = true
+        reenabled.syncWithPreferences()
+        reenabled.queue.flush()
+        DispatchQueue.main.flush()
+        suite.expect(reenabled.defaults.bool(forKey: enabled)
+                     && reenabled.defaults.durable[enabled] as? Bool == true
+                     && reenabled.defaults.string(forKey: marker) == on
+                     && reenabled.dock.value == .off,
+                     "reenabling after failed off persistence starts a new hold without reversing the new choice")
+        suite.expect(reenabled.restoreForRemoval() && reenabled.dock.value == .on
+                     && reenabled.defaults.string(forKey: marker) == nil,
+                     "the new hold still restores the setting it found")
+
         DispatchQueue.main.pending = []
     }
 }

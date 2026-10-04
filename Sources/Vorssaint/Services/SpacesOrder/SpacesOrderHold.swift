@@ -222,7 +222,7 @@ final class SpacesOrderHold {
     private let requestLock = NSRecursiveLock()
     private var requestGeneration: UInt64 = 0
     /// A cached off value is not enough to release recovery. This remains set
-    /// until that off value has synchronized successfully.
+    /// until that off value has synchronized or a newer choice starts a hold.
     private var pendingLetGoOwner: UInt64?
     /// Only the serial queue changes recovery ownership. Equal marker strings
     /// from different holds must still have different identities.
@@ -394,13 +394,26 @@ final class SpacesOrderHold {
 
     private func reconcileOnQueue(wanted: Bool, generation: UInt64) -> Bool {
         guard generation == currentRequest() else { return false }
-        if awaitingLetGoPersistence() {
+        let resumesAfterFailedPublication = awaitingLetGoPersistence()
+        if resumesAfterFailedPublication && !wanted {
             letGo(generation: generation)
             return false
         }
-        let marker = defaults.string(forKey: DefaultsKey.spacesOrderRestore)
         let current = system.read()
         guard generation == currentRequest(), current != .unreadable else { return false }
+        if resumesAfterFailedPublication {
+            // Turning the feature back on is a new choice. Retire only the
+            // unfinished handoff, then preserve the setting this hold finds.
+            requestLock.lock()
+            guard generation == requestGeneration else {
+                requestLock.unlock()
+                return false
+            }
+            pendingLetGoOwner = nil
+            requestLock.unlock()
+            clearMarker()
+        }
+        let marker = defaults.string(forKey: DefaultsKey.spacesOrderRestore)
         let held = heldJournal(reads: current)
         // A journal the Dock and the preference no longer bear out owes
         // nothing: the Dock restarted and read the preference, or it applied a
