@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI Agents supports more providers. App audio can play through AirPlay, and screenshots gain faster capture and sharing through temporary links. Monitor settings are easier to scan, while keyboard shortcuts and hover focus gain more flexibility.
+Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI Agents supports more providers. App audio can play through AirPlay, and screenshots gain faster capture and sharing through temporary links. Monitor graphs and settings are easier to read, while window controls and keyboard shortcuts gain more flexibility.
 
 ### Dynamic Island
 - A companion can live in the island. Installed on the Features page, and already installed in betas for people who use the Command Bar, it hops out from behind the camera and rests beside it when nothing else is there, passes through now and then, and comes out over music, the timer and other activities to react to music starting, an event beginning, an AI agent getting to work or finishing, its limit renewing, a finished download, what Watch waited for, the charger, Keep Awake, the microphone, a screenshot or the Mac unlocking. It stays beside the camera while the island opens and closes, steps into the notices it reacts to and hops back after, watches the last five seconds of a timer and cheers a finished focus session, follows the pointer, can be petted, and grows sleepy after a long rest and stretches when you come back. Its own tab shows it live in a slice of the island, acts out every moment it reacts to under See how it reacts, and has Say Hi to see it in the island. Choose its Style, Shape, Color and Side of the camera, how often it appears and whether it reacts. Settings → Dynamic Island → Companion.
@@ -32,6 +32,12 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 - The AI Agents page picks up where the last launch stopped and reads only what Claude Code, Codex and GitHub Copilot wrote since, instead of every log of the last 13 weeks. What it keeps for that is in the app's cache folder and is deleted when the section is turned off.
 
 ### Added
+- Window layout accepts pointer shortcuts made only of modifiers. Maximize with Margin now has an adjustable margin.
+- An optional fixed Spaces order stops macOS from rearranging desktops by recent use and restores your previous choice when turned off.
+- Port Manager rows can copy their port, PID or address and open TCP listeners in a browser.
+- App usage lists offer Force Kill in their context menu when Kill Process is installed, with confirmation.
+- Return or keypad Enter confirms and copies the selected color, then closes the color picker.
+
 - The recording editor's Copy button has a menu with Copy as GIF, which copies the edited recording as an animated GIF ready to paste. Copy and ⌘C still copy the video.
 - After a screenshot is saved or copied automatically, the confirmation preview can be turned off, or kept for 1, 2, 3, 5 or 10 seconds or until dismissed. A failed or partial action still shows it, and a preview kept until dismissed has a close button and leaves the keyboard with the app in front. Settings → Screen capture → Screenshot → More options → Show confirmation preview and Confirmation duration, shown when the default action saves or copies.
 - A new shortcut, off by default (⌃⌥⌘U), uploads the latest screenshot as a temporary link and copies the link. The floating preview's link button uploads with that default expiry on a click and its arrow picks another one, and a copied link closes the preview. A capture that went through the editor or was discarded is never uploaded by the shortcut. Settings → Screen capture → Temporary links → Upload latest screenshot and Default link expiry.
@@ -44,12 +50,15 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 - Focus follows mouse can give a window keyboard focus without bringing it to the front. With raising turned off, it can also focus while the pointer moves instead of waiting for it to stop.
 
 ### Changed
-- Monitor settings put each reading's display options beside its compact label, with separate groups for the menu bar, panel and shared settings.
+- Monitor settings put each reading's display options beside its compact label, with separate groups for the menu bar, panel and shared settings. History graphs now show their scale.
+- The Settings sidebar groups tools like the Features page and removes the duplicate Clipboard row.
 - With Group dependencies on, Homebrew lists dependencies that no installed package needs in a separate No longer needed group. Those with pending updates stay beside the other updates.
 - Deleting a Radial Menu profile now asks for confirmation and names the profile and what will be removed.
 - Trackpad middle click is named explicitly, and cleanup, microphone, quit-protection and Command Bar privacy messages more accurately describe what happens.
 
 ### Fixed
+- Clipboard history reopens at the top and searches large histories more efficiently.
+- Keep Awake can select helper apps bundled inside another app as running-app triggers and notices when they start or quit.
 - With macOS three-finger drag enabled, a four-finger trackpad press now works as a middle click.
 - Confirming Quit Protection for Steam now exits the app instead of only closing its window.
 - Maximize windows no longer restores the old size when a window moved from another display stays wider than the space beside the Dock.
@@ -85,10 +94,10 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 - Uninstalling with `Tools/uninstall.sh` now removes the password-free closed-lid rule, which the script used to leave behind.
 - The Uninstaller's app pickers and the Command Bar's Uninstall Application list offer only apps it can remove, so Apple's App Store apps, iPhone and iPad apps and linked apps no longer lead back to an empty drop zone. A refused app or a link dragged from a browser springs back from the drop zone instead.
 - Cleaner no longer treats common screenshot renames, such as adding copy or an emoji after the capture time, as untouched captures.
-- App Switcher keeps showing apps that are too busy to describe their windows to Accessibility in time.
+- App Switcher stays responsive while preparing window previews and keeps showing apps that are too busy to describe their windows in time.
 
 ### Contributors
-Thanks to @69grcv8vfm-sys, @adhvikrayaprolu, @AlirezaBs, @ashwanthbalakrishnan5, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @bmrtfm, @claude, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @georgebnov, @gorillasuti, @hartra344, @IanHollow, @ilim-cell, @iltonandrew, @itsalexcoman, @LeChaEgg, @mikeknight85, @nickciava98, @niukanen1, @oecer, @PathGao, @Qarru, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @shlok1806, @sim-pez, @theafox, @thitiwats, @trac3r00 and @yuzu-octopus. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
+Thanks to @69grcv8vfm-sys, @adhvikrayaprolu, @adnn-alc, @AlirezaBs, @ashwanthbalakrishnan5, @asim-sde, @Bald-M, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @bmrtfm, @claude, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @georgebnov, @gorillasuti, @hartra344, @IanHollow, @ilim-cell, @iltonandrew, @itsalexcoman, @JamesOBrien2, @LeChaEgg, @mikeknight85, @nickciava98, @niukanen1, @nzc0der, @oecer, @ozanuslan, @PathGao, @Qarru, @renan-tiberio, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @schnyders, @shlok1806, @sim-pez, @theafox, @thitiwats, @trac3r00, @yuzu-octopus and @ywu73. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
 
 ## [3.4.1-beta.1] - 2026-09-29
 
@@ -182,7 +191,6 @@ This beta takes Dynamic Island beyond the notch. It floats as a capsule on displ
 - Clipboard History search reuses prepared text while typing in long histories, reducing repeated processing.
 - Scratchpad warns in both views when notes cannot be saved and shows a warning if the final save fails while closing.
 - Homebrew commands and app update checks use proxy and mirror settings exported by the user's shell, allowing package operations on networks where direct access is blocked.
-- Keep Awake's running-app trigger can now use helper apps such as Citrix Viewer, and notices them starting and quitting without a restart.
 
 ### Contributors
 Thanks to @0mgABear, @0miicr0n, @abdulshahid1, @ahfornitani, @arsarsars1, @Aryan-Saini, @ashishsnair, @bebricoOOOOOOf, @bweh, @cedigang, @daniel-dosiper, @Ffinnis, @Frozen0wl, @Goonwb, @gorillasuti, @HirschiK, @I-Have-No-Idea-What-Im-Doing-Right-Now, @IanHollow, @ilim-cell, @iva-zhu, @Kernel-Hunter, @muhammad-p, @muskecan, @npcmail010, @PathGao, @renan-tiberio, @rhymeswithjazz, @ruvelro, @sarat03, @scream1ng, @shlok1806, @slantie, @trac3r00, @tyteachestech, @veged, @Void1-1, @Yahddyyp and @zxedacus. Feedback: Brain, DeWalt Brushless, ItsMoses, Pinea, Shiro and yellow.
