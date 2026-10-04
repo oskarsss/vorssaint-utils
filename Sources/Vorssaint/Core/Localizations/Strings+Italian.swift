@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Disinstallare Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint cancellerà le autorizzazioni, rimuoverà le preferenze e si sposterà nel Cestino, poi si chiuderà. Questa azione non può essere annullata dall’app, ma resta nel Cestino finché non lo svuoti.",
         advancedUninstallFailedTitle: "Disinstallazione interrotta",
-        advancedUninstallFailedBody: "Vorssaint non è riuscito a ripristinare un’impostazione di sistema che aveva cambiato: lo stop, la velocità delle ventole o l’accelerazione del mouse. Non è stato rimosso nulla. Riprova e consenti la richiesta della password, se compare.",
+        advancedUninstallFailedBody: "Vorssaint non è riuscito a ripristinare un’impostazione di sistema che aveva cambiato: lo stop, la velocità delle ventole, l’accelerazione del mouse o l’ordine degli Spazi. Non è stato rimosso nulla. Riprova e consenti la richiesta della password, se compare.",
 
         launchAtLogin: "Apri al login",
         languageLabel: "Lingua",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "Clic centrale da trackpad",
         middleClickEnable: "Il clic con tre dita agisce da clic centrale",
         middleClickEnableCaption: "Premere il trackpad con tre dita funziona come il clic della rotellina del mouse: aprire i link in una nuova scheda, chiudere le schede e tutto ciò che fa il tasto centrale.",
-        middleClickDragConflict: "Il trascinamento a tre dita di macOS è attivo e usa lo stesso gesto. Disattivalo in Impostazioni di Sistema, in Accessibilità, Controllo puntatore, Opzioni trackpad, e il clic centrale funzionerà.",
+        middleClickDragConflict: "Il trascinamento a tre dita di macOS è attivo e usa tre dita, quindi fai clic con quattro dita per il clic centrale. Per usarne tre, disattivalo in Impostazioni di Sistema, in Accessibilità, Controllo puntatore, Opzioni trackpad.",
+        middleClickNoTrackpad: "Impossibile leggere i tocchi del trackpad. Collega un trackpad supportato.",
         middleClickTapPicker: "Anche un tocco leggero fa clic",
         middleClickTapOff: "Disattivato",
         middleClickTapThreeFingers: "3 dita",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "Nessun pacchetto trovato",
         homebrewDependencies: "Dipendenze",
         homebrewGroupDependencies: "Raggruppa le dipendenze",
+        homebrewOrphans: "Non più necessari",
+        homebrewOrphansNote: "Installati come dipendenze, ma nessun pacchetto installato ne ha più bisogno.",
         homebrewNoSelection: "Seleziona un pacchetto installato o cercane uno nuovo.",
         homebrewDetailsTitle: "Dettagli pacchetto",
         homebrewInstall: "Installa",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Batteria periferiche",
         peripheralBatteryNoDevices: "Nessuna periferica trovata",
         monitorGraphsSection: "Grafici",
-        monitorGraphsCaption: "Scegli quali metriche mostrano un grafico nel tempo.",
 
         updateBannerTitle: "Aggiornamento disponibile",
         updateBannerAction: "Aggiorna",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "Apri vicino a un bordo dello schermo",
         shelfEdgeCaption: "Trascina un file verso il bordo dello schermo per far intravedere il ripiano. Rilascialo lì, oppure torna indietro e si ritira.",
         focusFollowsMouseName: "Il focus segue il mouse",
-        focusFollowsMouseCaption: "Mette a fuoco e porta in primo piano la finestra sotto il puntatore dopo una breve pausa.",
+        focusFollowsMouseCaption: "Mette a fuoco la finestra sotto il puntatore.",
         focusFollowsMouseDelay: "Ritardo al passaggio",
+        focusFollowsMouseRaise: "Porta la finestra in primo piano",
+        focusFollowsMouseWaitForStop: "Attendi che il puntatore si fermi",
         switcherMinimizedPlacementLabel: "Finestre ridotte a icona",
         switcherTreatHiddenAppsLikeMinimized: "Tratta le app nascoste come finestre ridotte a icona",
         switcherMinimizedPlacementNormal: "Ordine normale",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "Svuota alla chiusura",
         shelfClearOnCloseCaption: "Svuota lo scaffale solo quando fai clic sul pulsante di chiusura. Se si nasconde automaticamente o viene ridotto, gli elementi restano.",
         shelfShortcutFinderSelection: "Aggiungi la selezione del Finder con la scorciatoia",
-        shelfShortcutFinderSelectionCaption: "Con il Finder in primo piano, la scorciatoia apre il ripiano con i file selezionati già dentro. Senza selezione si apre come sempre."
+        shelfShortcutFinderSelectionCaption: "Con il Finder in primo piano, la scorciatoia apre il ripiano con i file selezionati già dentro. Senza selezione si apre come sempre.",
+        spacesOrderName: "Mantieni gli Spazi in ordine fisso",
+        spacesOrderCaption: "Impedisce a macOS di riordinare gli Spazi in base all’uso più recente, così restano nell’ordine che hai scelto. L’impostazione precedente torna quando disattivi questa opzione. Il Dock potrebbe riavviarsi una volta per applicare la modifica."
     )
 }

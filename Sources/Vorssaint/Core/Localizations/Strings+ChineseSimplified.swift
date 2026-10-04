@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "卸载 Vorssaint？",
         advancedUninstallConfirmBody: "Vorssaint 将清除其权限、移除偏好设置并移到废纸篓，然后退出。此操作无法从 App 内撤销，但在你清倒废纸篓之前它仍会留在其中。",
         advancedUninstallFailedTitle: "已停止卸载",
-        advancedUninstallFailedBody: "Vorssaint 无法还原它更改过的系统设置：睡眠、风扇转速或鼠标加速。没有移除任何内容。请重试，并在出现密码请求时允许。",
+        advancedUninstallFailedBody: "Vorssaint 无法还原它更改过的系统设置：睡眠、风扇转速、鼠标加速或空间顺序。没有移除任何内容。请重试，并在出现密码请求时允许。",
 
         launchAtLogin: "登录时启动",
         languageLabel: "语言",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "触控板中键点按",
         middleClickEnable: "三指按下作为中键点按",
         middleClickEnableCaption: "用三根手指按下触控板，效果等同于鼠标滚轮点按：在新标签页中打开链接、关闭标签页，以及中键能做的一切。",
-        middleClickDragConflict: "macOS 的三指拖移已开启，与此手势相同。请在系统设置的辅助功能、指针控制、触控板选项中将其关闭，中键点按即可使用。",
+        middleClickDragConflict: "macOS 的三指拖移已开启并占用三指，因此请用四指按下来进行中键点按。如要使用三指，请在系统设置的辅助功能、指针控制、触控板选项中将其关闭。",
+        middleClickNoTrackpad: "无法读取触控板的触摸输入。请连接支持的触控板。",
         middleClickTapPicker: "轻点也可点按",
         middleClickTapOff: "关闭",
         middleClickTapThreeFingers: "3 根手指",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "未找到包",
         homebrewDependencies: "依赖项",
         homebrewGroupDependencies: "将依赖项分组",
+        homebrewOrphans: "不再需要",
+        homebrewOrphansNote: "作为依赖装进来，但现在已安装的包都不需要它们。",
         homebrewNoSelection: "选择一个已安装的包，或搜索一个新的包。",
         homebrewDetailsTitle: "包详情",
         homebrewInstall: "安装",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "外设电池",
         peripheralBatteryNoDevices: "未找到外设",
         monitorGraphsSection: "图表",
-        monitorGraphsCaption: "选择哪些指标显示随时间变化的图表。",
 
         updateBannerTitle: "有可用更新",
         updateBannerAction: "更新",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "靠近屏幕边缘时打开",
         shelfEdgeCaption: "将文件拖向屏幕边缘，暂存架就会探出一角。放在那里即可放下，往回拖则会收回去。",
         focusFollowsMouseName: "悬停聚焦",
-        focusFollowsMouseCaption: "鼠标短暂停留后，聚焦并置前指针下方的窗口。",
+        focusFollowsMouseCaption: "聚焦指针下方的窗口。",
         focusFollowsMouseDelay: "悬停延迟",
+        focusFollowsMouseRaise: "将窗口置前",
+        focusFollowsMouseWaitForStop: "等待指针停下",
         switcherMinimizedPlacementLabel: "最小化的窗口",
         switcherTreatHiddenAppsLikeMinimized: "将隐藏的 App 视为最小化的窗口",
         switcherMinimizedPlacementNormal: "正常顺序",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "关闭时清空",
         shelfClearOnCloseCaption: "仅在点按关闭按钮时清空暂存架。自动隐藏或收起时会保留项目。",
         shelfShortcutFinderSelection: "使用快捷键添加访达中的所选项",
-        shelfShortcutFinderSelectionCaption: "访达位于前台时，快捷键会打开暂存架并放入所选文件。未选择任何内容时照常打开。"
+        shelfShortcutFinderSelectionCaption: "访达位于前台时，快捷键会打开暂存架并放入所选文件。未选择任何内容时照常打开。",
+        spacesOrderName: "固定空间顺序",
+        spacesOrderCaption: "阻止 macOS 按最近使用情况重新排列空间，让它们保持你设定的顺序。关闭此选项后会恢复之前的设置。为应用更改，Dock 可能会重新启动一次。"
     )
 }

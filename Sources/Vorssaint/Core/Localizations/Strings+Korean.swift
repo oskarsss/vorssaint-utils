@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Vorssaint를 제거할까요?",
         advancedUninstallConfirmBody: "Vorssaint가 권한과 설정을 지우고 휴지통으로 이동한 뒤 종료됩니다. 이 작업은 앱에서 되돌릴 수 없지만 휴지통을 비우기 전까지는 복원할 수 있습니다.",
         advancedUninstallFailedTitle: "제거를 중단했습니다",
-        advancedUninstallFailedBody: "Vorssaint가 변경한 시스템 설정을 되돌리지 못했습니다. 잠자기, 팬 속도 또는 마우스 가속입니다. 아무것도 삭제되지 않았습니다. 다시 시도하고 암호를 요청하면 허용하세요.",
+        advancedUninstallFailedBody: "Vorssaint가 변경한 시스템 설정을 되돌리지 못했습니다. 잠자기, 팬 속도, 마우스 가속 또는 공간 순서입니다. 아무것도 삭제되지 않았습니다. 다시 시도하고 암호를 요청하면 허용하세요.",
 
         launchAtLogin: "로그인 시 실행",
         languageLabel: "언어",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "트랙패드 가운데 클릭",
         middleClickEnable: "세 손가락 클릭을 가운데 클릭으로 사용",
         middleClickEnableCaption: "트랙패드를 세 손가락으로 누르면 마우스 휠 클릭과 같이 동작합니다. 링크를 새 탭으로 열거나 탭을 닫는 등 가운데 버튼으로 할 수 있는 모든 동작에 사용할 수 있습니다.",
-        middleClickDragConflict: "macOS의 세 손가락 드래그가 켜져 있고 같은 제스처를 사용합니다. 시스템 설정의 손쉬운 사용 > 포인터 제어 > 트랙패드 옵션에서 끄면 가운데 클릭이 작동합니다.",
+        middleClickDragConflict: "macOS의 세 손가락 드래그가 켜져 있어 세 손가락을 사용하므로, 가운데 클릭은 네 손가락으로 클릭하세요. 세 손가락을 사용하려면 시스템 설정의 손쉬운 사용 > 포인터 제어 > 트랙패드 옵션에서 끄세요.",
+        middleClickNoTrackpad: "트랙패드 터치를 읽을 수 없습니다. 지원되는 트랙패드를 연결하세요.",
         middleClickTapPicker: "가볍게 탭해도 클릭",
         middleClickTapOff: "끔",
         middleClickTapThreeFingers: "세 손가락",
@@ -397,6 +398,8 @@ extension Strings {
         homebrewNoPackages: "패키지를 찾을 수 없습니다",
         homebrewDependencies: "종속성",
         homebrewGroupDependencies: "종속성 그룹화",
+        homebrewOrphans: "더 이상 필요 없음",
+        homebrewOrphansNote: "종속성으로 설치되었지만 지금은 설치된 어떤 패키지도 필요로 하지 않습니다.",
         homebrewNoSelection: "설치한 패키지를 선택하거나 새 패키지를 검색하세요.",
         homebrewDetailsTitle: "패키지 세부 정보",
         homebrewInstall: "설치",
@@ -795,7 +798,6 @@ extension Strings {
         monitorShowPeripheralBattery: "주변 기기 배터리",
         peripheralBatteryNoDevices: "주변 기기를 찾을 수 없습니다",
         monitorGraphsSection: "그래프",
-        monitorGraphsCaption: "시간 흐름에 따라 그래프로 표시할 항목을 선택합니다.",
 
         updateBannerTitle: "업데이트를 사용할 수 있습니다",
         updateBannerAction: "업데이트",
@@ -1061,8 +1063,10 @@ extension Strings {
         shelfEdgeToggle: "화면 가장자리 근처에서 열기",
         shelfEdgeCaption: "파일을 화면 가장자리 쪽으로 드래그하면 선반이 살짝 나타납니다. 그 자리에 놓거나, 다시 뒤로 당기면 선반이 들어갑니다.",
         focusFollowsMouseName: "마우스를 따라 포커스",
-        focusFollowsMouseCaption: "잠시 멈춘 뒤 포인터 아래의 윈도우에 포커스를 주고 앞으로 가져옵니다.",
+        focusFollowsMouseCaption: "포인터 아래의 윈도우에 포커스를 줍니다.",
         focusFollowsMouseDelay: "호버 지연",
+        focusFollowsMouseRaise: "윈도우를 앞으로 가져오기",
+        focusFollowsMouseWaitForStop: "포인터가 멈출 때까지 기다리기",
         switcherMinimizedPlacementLabel: "최소화된 윈도우",
         switcherTreatHiddenAppsLikeMinimized: "숨긴 앱을 최소화된 윈도우처럼 처리",
         switcherMinimizedPlacementNormal: "일반 순서",
@@ -1086,6 +1090,8 @@ extension Strings {
         shelfClearOnClose: "닫을 때 항목 지우기",
         shelfClearOnCloseCaption: "닫기 버튼을 클릭할 때만 선반을 비웁니다. 자동으로 숨겨지거나 접을 때는 항목을 유지합니다.",
         shelfShortcutFinderSelection: "단축키로 Finder 선택 항목 추가",
-        shelfShortcutFinderSelectionCaption: "Finder가 앞에 있을 때 단축키를 누르면 선택한 파일이 담긴 선반이 열립니다. 아무것도 선택하지 않았다면 평소처럼 열립니다."
+        shelfShortcutFinderSelectionCaption: "Finder가 앞에 있을 때 단축키를 누르면 선택한 파일이 담긴 선반이 열립니다. 아무것도 선택하지 않았다면 평소처럼 열립니다.",
+        spacesOrderName: "공간 순서 고정",
+        spacesOrderCaption: "macOS가 최근 사용 순서에 따라 공간을 재정렬하지 않도록 해 정한 순서를 유지합니다. 끄면 이전 설정으로 돌아갑니다. 변경 사항을 적용하려고 Dock이 한 번 다시 시작될 수 있습니다."
     )
 }

@@ -344,6 +344,7 @@ struct Strings {
     let middleClickEnable: String
     let middleClickEnableCaption: String
     let middleClickDragConflict: String
+    let middleClickNoTrackpad: String
     let middleClickTapPicker: String
     let middleClickTapOff: String
     let middleClickTapThreeFingers: String
@@ -567,6 +568,8 @@ struct Strings {
     let homebrewNoPackages: String
     let homebrewDependencies: String
     let homebrewGroupDependencies: String
+    let homebrewOrphans: String
+    let homebrewOrphansNote: String
     let homebrewNoSelection: String
     let homebrewDetailsTitle: String
     let homebrewInstall: String
@@ -986,7 +989,6 @@ struct Strings {
     let monitorShowPeripheralBattery: String
     let peripheralBatteryNoDevices: String
     let monitorGraphsSection: String
-    let monitorGraphsCaption: String
 
     // MARK: Update notification + onboarding menu bar setup
     let updateBannerTitle: String
@@ -1265,6 +1267,8 @@ struct Strings {
     let focusFollowsMouseName: String
     let focusFollowsMouseCaption: String
     let focusFollowsMouseDelay: String
+    let focusFollowsMouseRaise: String
+    let focusFollowsMouseWaitForStop: String
     let switcherMinimizedPlacementLabel: String
     let switcherTreatHiddenAppsLikeMinimized: String
     let switcherMinimizedPlacementNormal: String
@@ -1289,6 +1293,8 @@ struct Strings {
     let shelfClearOnCloseCaption: String
     let shelfShortcutFinderSelection: String
     let shelfShortcutFinderSelectionCaption: String
+    let spacesOrderName: String
+    let spacesOrderCaption: String
 }
 
 // MARK: - Português (Brasil)
@@ -1428,7 +1434,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Desinstalar o Vorssaint?",
         advancedUninstallConfirmBody: "O Vorssaint vai limpar as permissões, apagar as preferências e ir para a Lixeira, e então fechar. Esta ação não pode ser desfeita pelo app, mas ele fica na Lixeira até você esvaziá-la.",
         advancedUninstallFailedTitle: "A desinstalação parou",
-        advancedUninstallFailedBody: "O Vorssaint não conseguiu restaurar uma configuração do sistema que ele mudou: repouso, velocidade das ventoinhas ou aceleração do mouse. Nada foi removido. Tente de novo e permita o pedido de senha, se ele aparecer.",
+        advancedUninstallFailedBody: "O Vorssaint não conseguiu restaurar uma configuração do sistema que ele mudou: repouso, velocidade das ventoinhas, aceleração do mouse ou ordem dos Espaços. Nada foi removido. Tente de novo e permita o pedido de senha, se ele aparecer.",
 
         launchAtLogin: "Iniciar junto com o Mac",
         languageLabel: "Idioma",
@@ -1468,7 +1474,8 @@ extension Strings {
         middleClickSection: "Botão do meio no trackpad",
         middleClickEnable: "Clique com três dedos vira botão do meio",
         middleClickEnableCaption: "Pressionar o trackpad com três dedos funciona como o clique da rodinha do mouse: abre links em nova aba, fecha abas e tudo mais que o botão do meio faz.",
-        middleClickDragConflict: "O arrastar com três dedos do macOS está ativado e usa esse mesmo gesto. Desative-o nos Ajustes do Sistema em Acessibilidade, Controle do Cursor, Opções do Trackpad, e o clique do meio vai funcionar.",
+        middleClickDragConflict: "O arrastar com três dedos do macOS está ativado e usa três dedos, então clique com quatro dedos para o clique do meio. Para usar três, desative-o nos Ajustes do Sistema em Acessibilidade, Controle do Cursor, Opções do Trackpad.",
+        middleClickNoTrackpad: "Não é possível ler os toques no trackpad. Conecte um trackpad compatível.",
         middleClickTapPicker: "Toque leve também clica",
         middleClickTapOff: "Desligado",
         middleClickTapThreeFingers: "3 dedos",
@@ -1686,6 +1693,8 @@ extension Strings {
         homebrewNoPackages: "Nenhum pacote encontrado",
         homebrewDependencies: "Dependências",
         homebrewGroupDependencies: "Agrupar dependências",
+        homebrewOrphans: "Não são mais necessárias",
+        homebrewOrphansNote: "Instaladas como dependências, mas nenhum pacote instalado precisa mais delas.",
         homebrewNoSelection: "Selecione um pacote instalado ou pesquise um novo.",
         homebrewDetailsTitle: "Detalhes do pacote",
         homebrewInstall: "Instalar",
@@ -2084,7 +2093,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Bateria dos periféricos",
         peripheralBatteryNoDevices: "Nenhum periférico encontrado",
         monitorGraphsSection: "Gráficos",
-        monitorGraphsCaption: "Escolha quais métricas mostram um gráfico ao longo do tempo.",
 
         updateBannerTitle: "Atualização disponível",
         updateBannerAction: "Atualizar",
@@ -2350,8 +2358,10 @@ extension Strings {
         shelfEdgeToggle: "Abrir perto de uma borda da tela",
         shelfEdgeCaption: "Ao arrastar um arquivo para perto da borda da tela, a área espia para dentro. Solte ali, ou puxe de volta e ela recua.",
         focusFollowsMouseName: "Foco ao passar o mouse",
-        focusFollowsMouseCaption: "Coloca em foco e traz para frente a janela sob o ponteiro após uma breve pausa.",
+        focusFollowsMouseCaption: "Coloca em foco a janela sob o ponteiro.",
         focusFollowsMouseDelay: "Atraso ao passar o mouse",
+        focusFollowsMouseRaise: "Trazer a janela para frente",
+        focusFollowsMouseWaitForStop: "Esperar o ponteiro parar",
         switcherMinimizedPlacementLabel: "Janelas minimizadas",
         switcherTreatHiddenAppsLikeMinimized: "Tratar apps ocultos como janelas minimizadas",
         switcherMinimizedPlacementNormal: "Ordem normal",
@@ -2375,7 +2385,9 @@ extension Strings {
         shelfClearOnClose: "Limpar ao fechar",
         shelfClearOnCloseCaption: "Esvazia a área somente quando você clica no botão de fechar. Ocultar automaticamente e encolher preservam os itens.",
         shelfShortcutFinderSelection: "Adicionar a seleção do Finder com o atalho",
-        shelfShortcutFinderSelectionCaption: "Com o Finder em primeiro plano, o atalho abre a área temporária já com os arquivos selecionados. Sem seleção, ela abre como sempre."
+        shelfShortcutFinderSelectionCaption: "Com o Finder em primeiro plano, o atalho abre a área temporária já com os arquivos selecionados. Sem seleção, ela abre como sempre.",
+        spacesOrderName: "Manter os Espaços em ordem fixa",
+        spacesOrderCaption: "Impede que o macOS reorganize os Espaços pelo uso mais recente, para que fiquem na ordem que você definiu. A configuração anterior volta ao desligar esta opção. O Dock pode reiniciar uma vez para aplicar a mudança."
     )
 }
 
@@ -2516,7 +2528,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Uninstall Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint will clear its permissions, remove its preferences and move to the Trash, then quit. This can’t be undone from the app, but it stays in the Trash until you empty it.",
         advancedUninstallFailedTitle: "Uninstall stopped",
-        advancedUninstallFailedBody: "Vorssaint could not put back a system setting it changed: sleep, fan speed or mouse acceleration. Nothing was removed. Try again and allow the password request if it appears.",
+        advancedUninstallFailedBody: "Vorssaint could not put back a system setting it changed: sleep, fan speed, mouse acceleration or Space order. Nothing was removed. Try again and allow the password request if it appears.",
 
         launchAtLogin: "Launch at login",
         languageLabel: "Language",
@@ -2556,7 +2568,8 @@ extension Strings {
         middleClickSection: "Trackpad middle click",
         middleClickEnable: "Three-finger click acts as middle click",
         middleClickEnableCaption: "Pressing the trackpad with three fingers works like a mouse wheel click: open links in a new tab, close tabs and everything else the middle button does.",
-        middleClickDragConflict: "macOS three-finger drag is turned on and uses this same gesture. Turn it off in System Settings under Accessibility, Pointer Control, Trackpad Options, and the middle click will work.",
+        middleClickDragConflict: "macOS three-finger drag is turned on and uses three fingers, so click with four fingers for the middle click. To use three, turn three-finger drag off in System Settings under Accessibility, Pointer Control, Trackpad Options.",
+        middleClickNoTrackpad: "Can’t read trackpad touches. Connect a supported trackpad.",
         middleClickTapPicker: "A light tap also clicks",
         middleClickTapOff: "Off",
         middleClickTapThreeFingers: "3 fingers",
@@ -2774,6 +2787,8 @@ extension Strings {
         homebrewNoPackages: "No packages found",
         homebrewDependencies: "Dependencies",
         homebrewGroupDependencies: "Group dependencies",
+        homebrewOrphans: "No longer needed",
+        homebrewOrphansNote: "Installed as dependencies, but no installed package needs them any more.",
         homebrewNoSelection: "Select an installed package or search for a new one.",
         homebrewDetailsTitle: "Package details",
         homebrewInstall: "Install",
@@ -3172,7 +3187,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Peripheral battery",
         peripheralBatteryNoDevices: "No devices found",
         monitorGraphsSection: "Graphs",
-        monitorGraphsCaption: "Choose which metrics show a graph over time.",
 
         updateBannerTitle: "Update available",
         updateBannerAction: "Update",
@@ -3438,8 +3452,10 @@ extension Strings {
         shelfEdgeToggle: "Open near a screen edge",
         shelfEdgeCaption: "Drag a file toward the screen edge to peek the shelf in. Drop it there, or pull back and it retreats.",
         focusFollowsMouseName: "Focus follows mouse",
-        focusFollowsMouseCaption: "Focuses and raises the window under the pointer after a short pause.",
+        focusFollowsMouseCaption: "Focuses the window under the pointer.",
         focusFollowsMouseDelay: "Hover delay",
+        focusFollowsMouseRaise: "Bring the window to the front",
+        focusFollowsMouseWaitForStop: "Wait for the pointer to stop",
         switcherMinimizedPlacementLabel: "Minimized windows",
         switcherTreatHiddenAppsLikeMinimized: "Treat hidden apps like minimized windows",
         switcherMinimizedPlacementNormal: "Normal ordering",
@@ -3463,6 +3479,8 @@ extension Strings {
         shelfClearOnClose: "Clear when closed",
         shelfClearOnCloseCaption: "Empties the shelf only when you click its close button. Automatic hiding and collapsing keep the items.",
         shelfShortcutFinderSelection: "Add the Finder selection with the shortcut",
-        shelfShortcutFinderSelectionCaption: "With Finder in front, the shortcut opens the shelf with the selected files already in it. With nothing selected, it opens as usual."
+        shelfShortcutFinderSelectionCaption: "With Finder in front, the shortcut opens the shelf with the selected files already in it. With nothing selected, it opens as usual.",
+        spacesOrderName: "Keep Spaces in a fixed order",
+        spacesOrderCaption: "Stops macOS from rearranging Spaces by most recent use, so they stay in the order you set. Your previous setting returns when this is turned off. The Dock may restart once to apply the change."
     )
 }

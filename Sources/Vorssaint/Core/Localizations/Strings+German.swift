@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Vorssaint deinstallieren?",
         advancedUninstallConfirmBody: "Vorssaint setzt seine Berechtigungen zurück, entfernt seine Einstellungen und wandert in den Papierkorb, dann beendet es sich. Das lässt sich aus der App nicht rückgängig machen, doch sie bleibt im Papierkorb, bis du ihn leerst.",
         advancedUninstallFailedTitle: "Deinstallation gestoppt",
-        advancedUninstallFailedBody: "Vorssaint konnte eine geänderte Systemeinstellung nicht wiederherstellen: Ruhezustand, Lüfterdrehzahl oder Mausbeschleunigung. Es wurde nichts entfernt. Versuche es erneut und erlaube die Kennwortabfrage, falls sie erscheint.",
+        advancedUninstallFailedBody: "Vorssaint konnte eine geänderte Systemeinstellung nicht wiederherstellen: Ruhezustand, Lüfterdrehzahl, Mausbeschleunigung oder Reihenfolge der Spaces. Es wurde nichts entfernt. Versuche es erneut und erlaube die Kennwortabfrage, falls sie erscheint.",
 
         launchAtLogin: "Beim Anmelden öffnen",
         languageLabel: "Sprache",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "Mittelklick per Trackpad",
         middleClickEnable: "Drei-Finger-Klick als Mittelklick",
         middleClickEnableCaption: "Das Trackpad mit drei Fingern zu drücken wirkt wie ein Klick aufs Mausrad: Links im neuen Tab öffnen, Tabs schließen und alles andere, was die mittlere Taste kann.",
-        middleClickDragConflict: "Das Ziehen mit drei Fingern von macOS ist aktiviert und nutzt dieselbe Geste. Schalte es in den Systemeinstellungen unter Bedienungshilfen, Zeigersteuerung, Trackpad-Optionen aus, damit der Mittelklick funktioniert.",
+        middleClickDragConflict: "Das Ziehen mit drei Fingern von macOS ist aktiviert und belegt drei Finger, klicke daher für den Mittelklick mit vier Fingern. Um drei zu nutzen, schalte es in den Systemeinstellungen unter Bedienungshilfen, Zeigersteuerung, Trackpad-Optionen aus.",
+        middleClickNoTrackpad: "Trackpad-Berührungen können nicht gelesen werden. Schließe ein unterstütztes Trackpad an.",
         middleClickTapPicker: "Leichtes Tippen klickt ebenfalls",
         middleClickTapOff: "Aus",
         middleClickTapThreeFingers: "3 Finger",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "Keine Pakete gefunden",
         homebrewDependencies: "Abhängigkeiten",
         homebrewGroupDependencies: "Abhängigkeiten gruppieren",
+        homebrewOrphans: "Nicht mehr benötigt",
+        homebrewOrphansNote: "Als Abhängigkeiten installiert, aber kein installiertes Paket braucht sie noch.",
         homebrewNoSelection: "Wähle ein installiertes Paket oder suche ein neues.",
         homebrewDetailsTitle: "Paketdetails",
         homebrewInstall: "Installieren",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Peripheriebatterie",
         peripheralBatteryNoDevices: "Keine Geräte gefunden",
         monitorGraphsSection: "Diagramme",
-        monitorGraphsCaption: "Wähle, welche Werte ein Diagramm über die Zeit anzeigen.",
 
         updateBannerTitle: "Update verfügbar",
         updateBannerAction: "Aktualisieren",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "In der Nähe eines Bildschirmrands öffnen",
         shelfEdgeCaption: "Ziehe eine Datei in Richtung Bildschirmrand, damit die Ablage kurz hervorschaut. Lass sie dort los, oder zieh zurück, und die Ablage verschwindet wieder.",
         focusFollowsMouseName: "Fokus folgt Maus",
-        focusFollowsMouseCaption: "Fokussiert das Fenster unter dem Zeiger und bringt es nach kurzer Pause nach vorn.",
+        focusFollowsMouseCaption: "Fokussiert das Fenster unter dem Zeiger.",
         focusFollowsMouseDelay: "Verzögerung",
+        focusFollowsMouseRaise: "Fenster nach vorn bringen",
+        focusFollowsMouseWaitForStop: "Warten, bis der Zeiger stillsteht",
         switcherMinimizedPlacementLabel: "Minimierte Fenster",
         switcherTreatHiddenAppsLikeMinimized: "Ausgeblendete Apps wie minimierte Fenster behandeln",
         switcherMinimizedPlacementNormal: "Normale Reihenfolge",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "Beim Schließen leeren",
         shelfClearOnCloseCaption: "Leert die Ablage nur, wenn du auf die Schließen-Taste klickst. Automatisches Ausblenden und Einklappen behalten die Objekte.",
         shelfShortcutFinderSelection: "Finder-Auswahl per Kurzbefehl hinzufügen",
-        shelfShortcutFinderSelectionCaption: "Ist der Finder im Vordergrund, öffnet der Kurzbefehl die Ablage bereits mit den ausgewählten Dateien. Ohne Auswahl öffnet sie sich wie gewohnt."
+        shelfShortcutFinderSelectionCaption: "Ist der Finder im Vordergrund, öffnet der Kurzbefehl die Ablage bereits mit den ausgewählten Dateien. Ohne Auswahl öffnet sie sich wie gewohnt.",
+        spacesOrderName: "Spaces in fester Reihenfolge halten",
+        spacesOrderCaption: "Verhindert, dass macOS die Spaces nach der letzten Nutzung neu anordnet, damit sie in deiner Reihenfolge bleiben. Deine vorherige Einstellung kehrt zurück, wenn du dies ausschaltest. Das Dock startet dafür eventuell einmal neu."
     )
 }

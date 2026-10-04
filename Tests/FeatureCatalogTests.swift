@@ -386,11 +386,11 @@ enum FeatureCatalogTests {
 
         // MARK: Features hub catalog
 
-        suite.expect(AppFeature.allCases.count == 76, "feature catalog has 76 features")
+        suite.expect(AppFeature.allCases.count == 77, "feature catalog has 77 features")
         suite.expect(Set(AppFeature.allCases.map(\.rawValue)).count == AppFeature.allCases.count,
                "feature ids are unique")
         suite.expect(AppFeature.allCases.map(\.rawValue) == [
-            "switcher", "dockPreview", "dockClick", "windowMaximizer", "windowLayout", "autoQuit",
+            "switcher", "dockPreview", "dockClick", "windowMaximizer", "windowLayout", "autoQuit", "spacesOrder",
             "scrollInverter", "scrollHorizontal", "focusFollowsMouse", "smoothScroll", "linearScroll", "mouseAcceleration", "mouseNavigation", "mouseButtonShortcuts", "middleClick",
             "mouseClickDebounce", "keyboardDebounce", "textSnippets", "superKey", "quitWindowProtection",
             "clipboardHistory", "pastePlain", "finderCutPaste", "finderRename", "shelf", "urlCleaner",
@@ -1803,6 +1803,13 @@ enum FeatureCatalogTests {
         let previousWindowGestureEnergy = UserDefaults.standard.object(
             forKey: DefaultsKey.windowGestureEnabled
         )
+        let previousWindowDirectionalEnergy = UserDefaults.standard.object(
+            forKey: DefaultsKey.windowDirectionalEnabled
+        )
+        let previousWindowDirectionalShortcut = UserDefaults.standard.object(
+            forKey: DefaultsKey.windowDirectionalShortcut
+        )
+        UserDefaults.standard.set(false, forKey: DefaultsKey.windowDirectionalEnabled)
         UserDefaults.standard.set(true, forKey: DefaultsKey.windowGestureEnabled)
         suite.expect(AppFeature.windowLayout.energyProfile == .pointer,
                "window dragging reports trackpad and mouse pointer input")
@@ -1829,6 +1836,19 @@ enum FeatureCatalogTests {
         )
         suite.expect(AppFeature.windowLayout.energyProfile == .idle,
                "edge snapping keeps no pointer listener when every visual zone is off")
+        UserDefaults.standard.set(true, forKey: DefaultsKey.windowDirectionalEnabled)
+        UserDefaults.standard.set("modifiers:control+command",
+                                  forKey: DefaultsKey.windowDirectionalShortcut)
+        suite.expect(AppFeature.windowLayout.energyProfile == .inputs,
+               "a modifier-only pointer layout trigger passively observes keyboard and pointer input")
+        UserDefaults.standard.set(true, forKey: DefaultsKey.windowGestureEnabled)
+        suite.expect(AppFeature.windowLayout.energyProfile == .inputs,
+               "window layout reports mouse and keyboard when pointer and modifier taps both run")
+        UserDefaults.standard.set(false, forKey: DefaultsKey.windowGestureEnabled)
+        UserDefaults.standard.set(GlobalShortcut.windowDirectionalDefault.storageValue,
+                                  forKey: DefaultsKey.windowDirectionalShortcut)
+        suite.expect(AppFeature.windowLayout.energyProfile == .idle,
+               "a key-based pointer layout trigger keeps no event tap at rest")
         if let previousWindowEdgeSnapZones {
             UserDefaults.standard.set(previousWindowEdgeSnapZones,
                                       forKey: DefaultsKey.windowEdgeSnapDisabledZones)
@@ -1846,6 +1866,18 @@ enum FeatureCatalogTests {
                                       forKey: DefaultsKey.windowGestureEnabled)
         } else {
             UserDefaults.standard.removeObject(forKey: DefaultsKey.windowGestureEnabled)
+        }
+        if let previousWindowDirectionalShortcut {
+            UserDefaults.standard.set(previousWindowDirectionalShortcut,
+                                      forKey: DefaultsKey.windowDirectionalShortcut)
+        } else {
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.windowDirectionalShortcut)
+        }
+        if let previousWindowDirectionalEnergy {
+            UserDefaults.standard.set(previousWindowDirectionalEnergy,
+                                      forKey: DefaultsKey.windowDirectionalEnabled)
+        } else {
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.windowDirectionalEnabled)
         }
         let radialMenuEnergyKeys = [DefaultsKey.radialMenuProfiles, DefaultsKey.radialMenuMouseButton]
         let previousRadialMenuEnergy = radialMenuEnergyKeys.map { UserDefaults.standard.object(forKey: $0) }

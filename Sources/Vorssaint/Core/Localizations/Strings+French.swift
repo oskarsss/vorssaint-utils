@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Désinstaller Vorssaint\u{00A0}?",
         advancedUninstallConfirmBody: "Vorssaint va effacer ses autorisations, supprimer ses préférences et se placer dans la corbeille, puis quitter. L’app ne peut pas annuler cette action, mais elle reste dans la corbeille jusqu’à ce que vous la vidiez.",
         advancedUninstallFailedTitle: "Désinstallation interrompue",
-        advancedUninstallFailedBody: "Vorssaint n’a pas pu rétablir un réglage système qu’il avait modifié\u{00A0}: la veille, la vitesse des ventilateurs ou l’accélération de la souris. Rien n’a été supprimé. Réessayez et autorisez la demande de mot de passe si elle apparaît.",
+        advancedUninstallFailedBody: "Vorssaint n’a pas pu rétablir un réglage système qu’il avait modifié\u{00A0}: la veille, la vitesse des ventilateurs, l’accélération de la souris ou l’ordre des Espaces. Rien n’a été supprimé. Réessayez et autorisez la demande de mot de passe si elle apparaît.",
 
         launchAtLogin: "Ouvrir à l’ouverture de session",
         languageLabel: "Langue",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "Clic du milieu au trackpad",
         middleClickEnable: "Le clic à trois doigts devient un clic du milieu",
         middleClickEnableCaption: "Appuyer sur le trackpad avec trois doigts agit comme un clic sur la molette de la souris\u{00A0}: ouvrir les liens dans un nouvel onglet, fermer des onglets et tout ce que fait le bouton du milieu.",
-        middleClickDragConflict: "Le glissement à trois doigts de macOS est activé et utilise ce même geste. Désactivez-le dans Réglages Système, sous Accessibilité, Contrôle du pointeur, Options du trackpad, pour que le clic du milieu fonctionne.",
+        middleClickDragConflict: "Le glissement à trois doigts de macOS est activé et utilise trois doigts, cliquez donc avec quatre doigts pour le clic du milieu. Pour en utiliser trois, désactivez-le dans Réglages Système, sous Accessibilité, Contrôle du pointeur, Options du trackpad.",
+        middleClickNoTrackpad: "Impossible de lire les touchers du trackpad. Connectez un trackpad compatible.",
         middleClickTapPicker: "Un tapotement léger clique aussi",
         middleClickTapOff: "Désactivé",
         middleClickTapThreeFingers: "3 doigts",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "Aucun paquet trouvé",
         homebrewDependencies: "Dépendances",
         homebrewGroupDependencies: "Regrouper les dépendances",
+        homebrewOrphans: "Plus nécessaires",
+        homebrewOrphansNote: "Installés comme dépendances, mais plus aucun paquet installé n’en a besoin.",
         homebrewNoSelection: "Sélectionnez un paquet installé ou recherchez-en un nouveau.",
         homebrewDetailsTitle: "Détails du paquet",
         homebrewInstall: "Installer",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Batterie des périphériques",
         peripheralBatteryNoDevices: "Aucun périphérique trouvé",
         monitorGraphsSection: "Graphiques",
-        monitorGraphsCaption: "Choisissez quelles mesures affichent un graphique dans le temps.",
 
         updateBannerTitle: "Mise à jour disponible",
         updateBannerAction: "Mettre à jour",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "Ouvrir près d’un bord de l’écran",
         shelfEdgeCaption: "Faites glisser un fichier vers le bord de l’écran pour entrevoir l’étagère. Déposez-le là, ou reculez et elle se retire.",
         focusFollowsMouseName: "Le focus suit la souris",
-        focusFollowsMouseCaption: "Active et place au premier plan la fenêtre sous le pointeur après une courte pause.",
+        focusFollowsMouseCaption: "Active la fenêtre sous le pointeur.",
         focusFollowsMouseDelay: "Délai de survol",
+        focusFollowsMouseRaise: "Placer la fenêtre au premier plan",
+        focusFollowsMouseWaitForStop: "Attendre que le pointeur s’arrête",
         switcherMinimizedPlacementLabel: "Fenêtres réduites",
         switcherTreatHiddenAppsLikeMinimized: "Traiter les apps masquées comme des fenêtres réduites",
         switcherMinimizedPlacementNormal: "Ordre normal",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "Vider à la fermeture",
         shelfClearOnCloseCaption: "Vide l’étagère uniquement lorsque vous cliquez sur le bouton de fermeture. Le masquage automatique et la réduction conservent les éléments.",
         shelfShortcutFinderSelection: "Ajouter la sélection du Finder avec le raccourci",
-        shelfShortcutFinderSelectionCaption: "Quand le Finder est au premier plan, le raccourci ouvre l’étagère avec les fichiers sélectionnés déjà dedans. Sans sélection, elle s’ouvre comme d’habitude."
+        shelfShortcutFinderSelectionCaption: "Quand le Finder est au premier plan, le raccourci ouvre l’étagère avec les fichiers sélectionnés déjà dedans. Sans sélection, elle s’ouvre comme d’habitude.",
+        spacesOrderName: "Garder les Espaces dans un ordre fixe",
+        spacesOrderCaption: "Empêche macOS de réorganiser les Espaces selon leur utilisation récente, pour qu’ils restent dans l’ordre choisi. Votre réglage précédent revient quand cette option est désactivée. Le Dock peut redémarrer une fois pour appliquer le changement."
     )
 }
