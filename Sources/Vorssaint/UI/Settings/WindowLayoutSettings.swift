@@ -23,6 +23,7 @@ struct WindowLayoutSettings: View {
     @AppStorage(DefaultsKey.windowGestureRaiseWindow) private var gestureRaiseWindow = false
     @AppStorage(DefaultsKey.windowLayoutWindowGap) private var windowGap = 0
     @AppStorage(DefaultsKey.windowLayoutScreenGap) private var screenGap = 0
+    @AppStorage(DefaultsKey.windowLayoutMarginPercent) private var marginPercent = WindowLayoutMargin.defaultPercent
     @AppStorage(DefaultsKey.windowLayoutSideRepeatCyclesThirds) private var sideRepeatCyclesThirds = false
     @State private var directionalError: String?
     @State private var systemTilingEnabled = WindowEdgeSnapSupport.isSystemTilingEnabled
@@ -213,6 +214,7 @@ struct WindowLayoutSettings: View {
                 Section(text.other) {
                     actionRow(.maximize)
                     actionRow(.marginMaximize)
+                    marginSlider
                     actionRow(.fullScreen)
                     actionRow(.center)
                     actionRow(.previousDisplay)
@@ -299,6 +301,22 @@ struct WindowLayoutSettings: View {
         default: return "\(value) px"
         }
         return "\(name) (\(value) px)"
+    }
+
+    private var marginSlider: some View {
+        HStack(spacing: 12) {
+            Slider(value: Binding(
+                get: { WindowLayoutMargin.sanitizedPercent(marginPercent) },
+                set: { marginPercent = WindowLayoutMargin.sanitizedPercent($0) }
+            ), in: WindowLayoutMargin.percentRange, step: 1) {
+                Text(text.marginPerEdge)
+            }
+            Text(WindowLayoutMargin.sanitizedPercent(marginPercent) / 100,
+                 format: .percent.precision(.fractionLength(0)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .trailing)
+        }
     }
 
     private func refreshSystemTilingState() {

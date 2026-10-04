@@ -310,6 +310,10 @@ enum WindowDirectionalAction: Equatable {
 enum WindowDirectionalGestureSupport {
     static let activationDistance: CGFloat = 28
 
+    static func appKitPoint(fromQuartz point: CGPoint, menuBarScreenTopY: CGFloat) -> CGPoint {
+        CGPoint(x: point.x, y: menuBarScreenTopY - point.y)
+    }
+
     static func action(from origin: CGPoint,
                        to point: CGPoint,
                        activationDistance: CGFloat = activationDistance) -> WindowDirectionalAction? {
@@ -727,6 +731,13 @@ enum WindowDirectionalModifierTapSupport {
     static let options: CGEventTapOptions = .listenOnly
     static let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
         | CGEventMask(1 << CGEventType.keyDown.rawValue)
+        | CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
+        | CGEventMask(1 << CGEventType.leftMouseUp.rawValue)
+        | CGEventMask(1 << CGEventType.rightMouseDown.rawValue)
+        | CGEventMask(1 << CGEventType.rightMouseUp.rawValue)
+        | CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
+        | CGEventMask(1 << CGEventType.otherMouseUp.rawValue)
+        | CGEventMask(1 << CGEventType.scrollWheel.rawValue)
 
     static func afterCallback(_ work: @escaping () -> Void) {
         DispatchQueue.main.async { work() }
@@ -750,9 +761,44 @@ enum WindowDirectionalModifierInputPolicy {
     }
 }
 
+/// Button history follows the same passive stream as the chord. A button
+/// released before a delayed callback still counts as held at the chord's press.
+struct WindowDirectionalModifierButtons {
+    private(set) var mask: UInt32 = 0
+    var isPressed: Bool { mask != 0 }
+
+    static func current() -> Self {
+        var state = Self()
+        for index in 0..<32 {
+            if let button = CGMouseButton(rawValue: UInt32(index)),
+               CGEventSource.buttonState(.combinedSessionState, button: button) {
+                state.mask |= UInt32(1) << index
+            }
+        }
+        return state
+    }
+
+    mutating func observe(_ type: CGEventType, buttonNumber: Int64) {
+        let button: Int64
+        let isDown: Bool
+        switch type {
+        case .leftMouseDown: (button, isDown) = (0, true)
+        case .leftMouseUp: (button, isDown) = (0, false)
+        case .rightMouseDown: (button, isDown) = (1, true)
+        case .rightMouseUp: (button, isDown) = (1, false)
+        case .otherMouseDown: (button, isDown) = (buttonNumber, true)
+        case .otherMouseUp: (button, isDown) = (buttonNumber, false)
+        default: return
+        }
+        guard (0..<32).contains(button) else { return }
+        let bit = UInt32(1) << Int(button)
+        if isDown { mask |= bit } else { mask &= ~bit }
+    }
+}
+
 /// Event-source counters catch a quick click or scroll that completes while
 /// the main queue is still waiting to start the deferred gesture. Reading the
-/// counters does not subscribe the idle tap to pointer events.
+/// counters also catches input that arrives during synchronous target lookup.
 struct WindowDirectionalModifierPointerSnapshot: Equatable {
     let leftMouseDown: UInt32
     let rightMouseDown: UInt32
@@ -793,9 +839,11 @@ enum WindowDirectionalModifierStartupGuard {
         currentSnapshot: () -> WindowDirectionalModifierPointerSnapshot,
         mouseButtonPressed: () -> Bool,
         startObserving: () -> Bool,
+        isCurrent: () -> Bool = { true },
         lookupTarget: () -> Value?
     ) -> WindowDirectionalModifierStartupOutcome<Value> {
         func canContinue() -> Bool {
+            guard isCurrent() else { return false }
             let pointerInputSinceArm = armedAt.map {
                 currentSnapshot().hasPointerInput(since: $0)
             } ?? false
@@ -815,9 +863,18 @@ enum WindowDirectionalModifierStartupGuard {
 
 /// A modifier chord starts once, finishes on its first required-key release,
 /// and cannot restart until all its keys are up. Extra modifiers cancel it.
+struct WindowDirectionalModifierOwnership: Equatable {
+    let registrationID: UUID
+    let generation: UInt64
+}
+
 struct WindowDirectionalModifierHold {
     enum Decision { case none, begin, finish, cancel }
     let expected: GlobalShortcutModifiers
+    private let registrationID = UUID()
+    var ownership: WindowDirectionalModifierOwnership {
+        WindowDirectionalModifierOwnership(registrationID: registrationID, generation: generation)
+    }
     private(set) var generation: UInt64 = 0
     private var active = false
     private var waitingForRelease: Bool
@@ -836,6 +893,10 @@ struct WindowDirectionalModifierHold {
     }
 
     mutating func cancelForKeyPress() -> Bool {
+        cancelForInput()
+    }
+
+    mutating func cancelForInput() -> Bool {
         guard active || !held.isEmpty else { return false }
         cancel()
         return true
