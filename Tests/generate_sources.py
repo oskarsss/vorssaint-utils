@@ -1332,6 +1332,28 @@ def main():
           + declaration(downloads, "    func cancelNotchFolderChoice()")
           + "}\n}\n")
 
+    window_directional = "Sources/Vorssaint/Services/WindowLayout/WindowLayoutService.swift"
+    window_gesture = "Sources/Vorssaint/Services/WindowLayout/WindowGestureSupport.swift"
+    write("WindowDirectionalModifierRuntime.swift", "import AppKit\nimport CoreGraphics\nimport Foundation\n"
+          + "extension WindowDirectionalModifierRuntimeTests {\n"
+          + "".join(declaration(window_gesture, prefix) for prefix in [
+              "struct WindowDirectionalModifierButtons {",
+              "struct WindowDirectionalModifierPointerSnapshot:",
+              "enum WindowDirectionalModifierStartupOutcome<Value> {",
+              "enum WindowDirectionalModifierStartupGuard {"])
+          + declaration(window_directional, "private struct WindowDirectionalSession {").replace("private ", "", 1)
+          + "final class Host: Fixture {\n"
+          + "".join(declaration(window_directional, prefix).replace("private ", "", 1)
+                    .replace("AXIsProcessTrusted()", "WindowDirectionalModifierRuntimeTests.accessibilityGranted")
+                    .replace("CGEvent.tapEnable(", "tapEnable(")
+                    for prefix in [
+              "    private func observeDirectionalModifierEvent(",
+              "    private func beginDirectionalGesture(",
+              "    private func updateDirectionalGesture(",
+              "    private func finishDirectionalGesture()",
+              "    private func cancelDirectionalGesture("])
+          + "}\n}\n")
+
     factories = []
     pattern = r"static\s+func\s+(\w+)\s*\(\s*_\s+\w+:\s*AppLanguage\s*\)\s*->"
     for path in sorted((ROOT / "Sources/Vorssaint/Core").glob("*Strings.swift")):

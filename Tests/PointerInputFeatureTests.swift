@@ -3354,8 +3354,18 @@ enum PointerInputFeatureTests {
                 .joined(separator: "\n")
             suite.expect(code.contains("SessionActivity.shared.onChange"),
                    "\(tapOwner) rebuilds its tap when the session comes back")
-            let rearm = code.components(separatedBy: "tapDisabledByTimeout")
-                .dropFirst().first?.components(separatedBy: "return").first ?? ""
+            let timeoutClause = code.components(separatedBy: "tapDisabledByTimeout")
+                .dropFirst().first ?? ""
+            var rearm = ""
+            var depth = 0
+            for character in timeoutClause {
+                if character == "{" { depth += 1 }
+                if depth > 0 { rearm.append(character) }
+                if character == "}" {
+                    depth -= 1
+                    if depth == 0 { break }
+                }
+            }
             suite.expect(rearm.contains("SessionActivity.shared.isActive"),
                    "\(tapOwner) does not re-arm a disabled tap into a switched-away session")
             if tapOwner.contains("MouseNavigation")
