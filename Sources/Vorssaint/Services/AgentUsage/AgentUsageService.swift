@@ -4,13 +4,14 @@
 import Combine
 import Foundation
 
-/// Reads Claude Code and Codex usage from their local session logs while the
-/// AI section is on, along with the plan limits the Claude app saves. The
-/// files are read where they are, incrementally, and nothing is copied or
-/// sent: only counters are kept, in memory and in the app's private folder
-/// so the next launch reads only what the agents wrote meanwhile. The one
-/// request it makes fetches the public price list, when the person keeps
-/// prices up to date.
+/// Reads Claude Code, Codex and GitHub Copilot usage from local session logs, and
+/// OpenCode usage from its database, while the AI section is on, along with
+/// the plan limits the Claude app saves. The files are read where they are,
+/// incrementally, and nothing is copied or sent: only counters are kept, in
+/// memory and in the app's private folder so the next launch reads only what
+/// the agents wrote meanwhile. OpenCode's stay in memory only, and its
+/// database is read again at each launch. The one request it makes fetches
+/// the public price list, when the person keeps prices up to date.
 ///
 /// Reading happens on a private queue; the main thread and that queue hand
 /// work to each other asynchronously, except that a stop waits for progress
@@ -227,6 +228,7 @@ final class AgentUsageService: ObservableObject {
             cursors.removeAll()
             // Prices first, so the first read is already priced.
             loadPrices()
+            // Keep the loading state until all initial history has been read.
             let horizon = Date().addingTimeInterval(-Self.horizon)
             let roots = AgentLogRoot.all(home: home).filter { providers.contains($0.provider) }
             let files = AgentLogReader.discover(roots, since: horizon)
@@ -284,14 +286,19 @@ final class AgentUsageService: ObservableObject {
         guard mark != savedMark else { return }
         // A log that started over while running still counts what its old
         // contents gave. Left out, the next launch reads it as rewritten.
-        let contents = AgentUsageArchive.Contents(providers: enabled, store: store.saved,
-                                                  cursors: cursors.values.filter { !$0.restarted }.map(\.saved))
+        // Nothing from OpenCode's database is saved. Its open replies and
+        // sessions live only in memory, so each launch reads it again.
+        let kept = cursors.values.filter { !$0.restarted && $0.provider != .opencode }
+        let contents = AgentUsageArchive.Contents(providers: enabled, store: store.saved, cursors: kept.map(\.saved))
         if AgentUsageArchive.save(contents) { savedMark = mark }
     }
 
-    /// Changes whenever a log is read further, replaced or let go.
+    /// Changes whenever a log is read further, replaced or let go. OpenCode,
+    /// which is never saved, leaves it alone.
     private var progressMark: Int {
-        cursors.values.reduce(store.records.count) { mark, cursor in
+        let records = store.records.reduce(0) { $1.provider == .opencode ? $0 : $0 + 1 }
+        return cursors.values.reduce(records) { mark, cursor in
+            guard cursor.provider != .opencode else { return mark }
             var hasher = Hasher()
             hasher.combine(cursor.path)
             hasher.combine(cursor.offset)
@@ -308,8 +315,9 @@ final class AgentUsageService: ObservableObject {
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let read = self.pollOpenLogs(within: Self.pollWindow)
+            let stopped = self.store.closeSettledTurns(now: Date())
             // After the logs, so a turn its last lines ended ends as usual.
-            guard self.closeEndedTurns(self.watchedRoots) || read else { return }
+            guard self.closeEndedTurns(self.watchedRoots) || read || stopped else { return }
             self.checkLimits()
             self.schedulePublish()
         }
@@ -325,10 +333,20 @@ final class AgentUsageService: ObservableObject {
         let now = Date()
         // A turn gone quiet, as while it waits for an approval, is noticed
         // as soon as its work resumes.
-        let working = Set(store.turns.keys).union(store.waiting.keys)
+        var working = Set(store.turns.keys).union(store.waiting.keys)
+        // An OpenCode turn is kept by database and session.
+        for key in working {
+            if let mark = key.firstIndex(of: "#") { working.insert(String(key[..<mark])) }
+        }
         var changed = false
         for (path, cursor) in cursors
         where working.contains(path) || now.timeIntervalSince(cursor.modified) < window {
+            if cursor.provider == .opencode {
+                // A database changes in place: its write-ahead log grows instead.
+                if let modified = AgentOpenCodeReader.modified(path), modified <= cursor.modified { continue }
+                if read(path, provider: cursor.provider) { changed = true }
+                continue
+            }
             var info = stat()
             let exists = stat(path, &info) == 0
             guard !exists || UInt64(max(0, info.st_size)) != cursor.offset
@@ -360,19 +378,31 @@ final class AgentUsageService: ObservableObject {
         cursors[path] = cursor
         var changed = false
         let now = Date()
-        AgentLogReader.readAppended(cursor, shouldContinue: { !cancellation.isCancelled }) { line in
+        let consume: (Data) -> Void = { [self] line in
             // Apply in log order while the chunk is alive instead of retaining
             // every parsed entry until a potentially multi-gigabyte file ends.
             let entries: [AgentLogEntry]
             switch provider {
             case .claude: entries = AgentLogParser.parseClaude(line, state: &cursor.state, now: now)
             case .codex: entries = AgentLogParser.parseCodex(line, state: &cursor.state, now: now)
+            case .opencode: entries = AgentLogParser.parseOpenCode(line, state: &cursor.state, now: now)
+            case .copilot: entries = AgentLogParser.parseCopilot(line, state: &cursor.state, now: now)
             }
             guard !entries.isEmpty else { return }
             changed = true
-            let finished = store.apply(entries, file: path, provider: provider, tracksTurns: cursor.tracksTurns,
-                                       parent: cursor.parent, modified: cursor.modified, now: now)
+            let isSubagent = provider == .opencode && !cursor.state.parentSession.isEmpty
+            let turnFile = provider == .opencode && !cursor.state.session.isEmpty ? "\(path)#\(cursor.state.session)" : path
+            let tracksTurns = isSubagent ? false : cursor.tracksTurns
+            let parent = isSubagent ? "\(path)#\(cursor.state.parentSession)" : cursor.parent
+            let finished = store.apply(entries, file: turnFile, provider: provider, tracksTurns: tracksTurns,
+                                       parent: parent, modified: cursor.modified, now: now)
             finished.forEach(report)
+        }
+        if provider == .copilot && cursor.offset == 0 {
+            AgentLogReader.readCopilotHistory(cursor, shouldContinue: { !cancellation.isCancelled }, line: consume)
+        } else {
+            AgentLogReader.readAppended(cursor, since: now.addingTimeInterval(-Self.horizon),
+                                        shouldContinue: { !cancellation.isCancelled }, line: consume)
         }
         return changed
     }
@@ -398,8 +428,9 @@ final class AgentUsageService: ObservableObject {
             }
         } else {
             for path in Set(paths) where AgentLogReader.isLog(path) {
-                guard let root = watchedRoots.first(where: { path.hasPrefix($0.url.path + "/") }) else { continue }
-                if read(path, provider: root.provider) { changed = true }
+                let actualPath = path.hasSuffix("-wal") ? String(path.dropLast(4)) : path
+                guard let root = watchedRoots.first(where: { $0.accepts(actualPath) }) else { continue }
+                if read(actualPath, provider: root.provider) { changed = true }
             }
         }
         // Saved tool output and lines with nothing to keep do not change the
@@ -597,10 +628,8 @@ final class AgentUsageService: ObservableObject {
                 : (try? Data(contentsOf: url)).flatMap(AgentClaudeAppUsage.samples) ?? []
         }
         // Claude Code's own first request can place the session's start.
-        let recent = store.records.filter {
-            $0.provider == .claude && $0.date <= now && now.timeIntervalSince($0.date) < AgentUsageSummary.blockHistory
-        }
-        let start = AgentUsageSummary.currentBlock(recent, now: now)?.start
+        let start = AgentClaudeAppUsage.sessionStart(store.records, samples: claudeAppSamples,
+                                                     organization: claudeOrganization)
         if let limits = AgentClaudeAppUsage.limits(from: claudeAppSamples, now: now, sessionStart: start,
                                                    organization: claudeOrganization) {
             store.setLimits(limits)

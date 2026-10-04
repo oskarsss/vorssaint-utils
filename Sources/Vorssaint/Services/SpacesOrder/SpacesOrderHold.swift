@@ -13,6 +13,8 @@ enum SpacesRearrangeSetting: Equatable {
     /// Forced by a management profile or stored as something other than a
     /// Boolean. The feature never writes over it.
     case unsupported
+    /// Synchronization failed, so the stored value is not known yet.
+    case unreadable
 }
 
 /// The decisions behind keeping Spaces in a fixed order, kept apart from the
@@ -20,19 +22,12 @@ enum SpacesRearrangeSetting: Equatable {
 enum SpacesOrderSupport {
     static let dockDomain = "com.apple.dock"
     static let preferenceKey = "mru-spaces"
-    /// The key the Dock's own settings call takes; the System Settings
-    /// checkbox changes the same one.
-    static let liveKey = "autoReorderSpaces"
     /// Marker values: the state to put back when the feature lets go.
     static let restoreAbsent = "absent"
     static let restoreOn = "on"
     /// Rearranging was already off when the feature turned on, so nothing is
     /// put back. The marker still shows that the feature holds it.
     static let restoreOff = "off"
-    /// A live change counts only once the preference reads back changed,
-    /// checked every 100 ms for up to two seconds.
-    static let confirmAttempts = 20
-    static let confirmPauseMicroseconds: useconds_t = 100_000
 
     static func setting(raw: Any?, isForced: Bool) -> SpacesRearrangeSetting {
         if isForced { return .unsupported }
@@ -74,7 +69,7 @@ enum SpacesOrderSupport {
             switch setting {
             case .absent, .on: self = .rearranging
             case .off: self = .fixed
-            case .unsupported: return nil
+            case .unsupported, .unreadable: return nil
             }
         }
     }
@@ -132,6 +127,7 @@ enum SpacesOrderSupport {
     /// and otherwise the latest toggle is applied over it.
     static func step(wanted: Bool, current: SpacesRearrangeSetting, marker: String?,
                      dockRuns: DockState? = nil) -> Step {
+        guard current != .unreadable else { return .none }
         if let dockRuns {
             let reads = DockState(current)
             // Without a marker, or with one that put nothing aside, nothing is
@@ -146,7 +142,7 @@ enum SpacesOrderSupport {
         if wanted {
             switch current {
             case .off: return marker == nil ? .remember : .none
-            case .unsupported: return .none
+            case .unsupported, .unreadable: return .none
             case .absent, .on:
                 guard marker == nil else { return .letGo }
                 return .hold(marker: current == .absent ? restoreAbsent : restoreOn)
@@ -165,16 +161,12 @@ enum SpacesOrderSupport {
 struct SpacesOrderSystem {
     /// The current `mru-spaces` state.
     var read: () -> SpacesRearrangeSetting
-    /// Asks the Dock to change the setting at once. False when that call is
-    /// not available on this system.
-    var setLive: (Bool) -> Bool
     /// Writes `mru-spaces` to the preference file; nil removes the key.
     var write: (Bool?) -> Bool
     /// Restarts the Dock so it reads a written preference.
     var restartDock: () -> Bool
     /// The running Dock's process, nil when none runs. A restart replaces it.
     var dockPID: () -> pid_t?
-    var pause: () -> Void
 }
 
 extension SpacesOrderSystem {
@@ -182,12 +174,12 @@ extension SpacesOrderSystem {
         read: {
             let key = SpacesOrderSupport.preferenceKey as CFString
             let domain = SpacesOrderSupport.dockDomain as CFString
-            CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            guard CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            else { return .unreadable }
             let raw = CFPreferencesCopyValue(key, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
             return SpacesOrderSupport.setting(raw: raw,
                                               isForced: CFPreferencesAppValueIsForced(key, domain))
         },
-        setLive: { DockSettingsCall.set(rearranging: $0) },
         write: { value in
             let domain = SpacesOrderSupport.dockDomain as CFString
             CFPreferencesSetValue(SpacesOrderSupport.preferenceKey as CFString,
@@ -202,8 +194,7 @@ extension SpacesOrderSystem {
         dockPID: {
             NSRunningApplication.runningApplications(withBundleIdentifier: SpacesOrderSupport.dockDomain)
                 .first?.processIdentifier
-        },
-        pause: { usleep(SpacesOrderSupport.confirmPauseMicroseconds) }
+        }
     )
 }
 
@@ -223,9 +214,19 @@ final class SpacesOrderHold {
                                     category: "spaces-order")
     private let defaults: UserDefaults
     private let system: SpacesOrderSystem
-    /// Serial, so the Dock call, the confirmation wait and a restart stay off
-    /// the main thread and never overlap.
+    /// Serial, so preference writes and a restart never overlap.
     private let queue = DispatchQueue(label: "com.vorssaint.spaces-order")
+    private let queueKey = DispatchSpecificKey<Bool>()
+    /// A newer request invalidates a reply before its queued work starts. The
+    /// main-thread toggle write can notify observers that request another sync.
+    private let requestLock = NSRecursiveLock()
+    private var requestGeneration: UInt64 = 0
+    /// A cached off value is not enough to release recovery. This remains set
+    /// until that off value has synchronized successfully.
+    private var pendingLetGoOwner: UInt64?
+    /// Only the serial queue changes recovery ownership. Equal marker strings
+    /// from different holds must still have different identities.
+    private var markerGeneration: UInt64 = 0
     /// Observers for the moments a change made in System Settings shows up:
     /// a Space change and the app coming forward. Touched only on `queue`.
     private var watchTokens: [(center: NotificationCenter, token: NSObjectProtocol)] = []
@@ -233,6 +234,31 @@ final class SpacesOrderHold {
     init(defaults: UserDefaults, system: SpacesOrderSystem) {
         self.defaults = defaults
         self.system = system
+        queue.setSpecific(key: queueKey, value: true)
+    }
+
+    private func onQueue<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: queueKey) == true { return work() }
+        return queue.sync(execute: work)
+    }
+
+    private func newRequest() -> UInt64 {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        requestGeneration &+= 1
+        return requestGeneration
+    }
+
+    private func currentRequest() -> UInt64 {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        return requestGeneration
+    }
+
+    private func awaitingLetGoPersistence() -> Bool {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        return pendingLetGoOwner == markerGeneration
     }
 
     deinit {
@@ -268,9 +294,13 @@ final class SpacesOrderHold {
     /// Follows the toggle and the hub's availability. The wanted state is read
     /// when the work runs, so rapid toggles settle on the last one.
     func syncWithPreferences() {
+        let generation = newRequest()
         queue.async { [self] in
+            guard generation == currentRequest() else { return }
             let wanted = isWanted
-            if !reconcile(wanted: wanted) {
+            let completed = reconcileOnQueue(wanted: wanted, generation: generation)
+            guard generation == currentRequest() else { return }
+            if !completed {
                 Self.log.error("Space rearranging did not change (fixed order wanted: \(wanted, privacy: .public))")
             }
             // Read again: the toggle may have changed while the work ran. A
@@ -286,12 +316,18 @@ final class SpacesOrderHold {
     /// handed the let-go to the main thread.
     @discardableResult
     func letGoIfRearrangingReturned() -> Bool {
+        let generation = currentRequest()
+        return onQueue { letGoIfRearrangingReturnedOnQueue(generation: generation) }
+    }
+
+    private func letGoIfRearrangingReturnedOnQueue(generation: UInt64) -> Bool {
+        guard generation == currentRequest() else { return false }
         guard isWanted, let marker = defaults.string(forKey: DefaultsKey.spacesOrderRestore) else { return false }
         let current = system.read()
         guard SpacesOrderSupport.step(wanted: true, current: current, marker: marker,
                                       dockRuns: heldJournal(reads: current)?.dockRuns) == .letGo
         else { return false }
-        letGo()
+        letGo(generation: generation)
         return true
     }
 
@@ -308,12 +344,13 @@ final class SpacesOrderHold {
         ]
         watchTokens = moments.map { center, name in
             (center: center, token: center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
-                self?.queue.async { [weak self] in
-                    // watchTokens is only touched on this queue, so a watch
-                    // already stopped by a notification queued ahead of this
-                    // one is caught here before reading the Dock again.
-                    guard let self, !self.watchTokens.isEmpty, self.letGoIfRearrangingReturned() else { return }
-                    self.watch(false)
+                guard let self else { return }
+                let generation = self.currentRequest()
+                self.queue.async { [weak self] in
+                    guard let self, !self.watchTokens.isEmpty else { return }
+                    // Keep watching until the reply is accepted. A newer
+                    // request may discard a reply already waiting on main.
+                    _ = self.letGoIfRearrangingReturnedOnQueue(generation: generation)
                 }
             })
         }
@@ -338,9 +375,11 @@ final class SpacesOrderHold {
     func restoreForRemoval() -> Bool {
         // Checked on the queue, behind any sync still waiting to hold, so a
         // marker that sync is about to write is seen and put back too.
-        queue.sync {
+        let generation = newRequest()
+        return onQueue {
+            guard generation == currentRequest() else { return false }
             guard Self.isOwed(in: defaults) else { return true }
-            return reconcile(wanted: false)
+            return reconcileOnQueue(wanted: false, generation: generation)
         }
     }
 
@@ -349,8 +388,19 @@ final class SpacesOrderHold {
     /// owed.
     @discardableResult
     func reconcile(wanted: Bool) -> Bool {
+        let generation = newRequest()
+        return onQueue { reconcileOnQueue(wanted: wanted, generation: generation) }
+    }
+
+    private func reconcileOnQueue(wanted: Bool, generation: UInt64) -> Bool {
+        guard generation == currentRequest() else { return false }
+        if awaitingLetGoPersistence() {
+            letGo(generation: generation)
+            return false
+        }
         let marker = defaults.string(forKey: DefaultsKey.spacesOrderRestore)
         let current = system.read()
+        guard generation == currentRequest(), current != .unreadable else { return false }
         let held = heldJournal(reads: current)
         // A journal the Dock and the preference no longer bear out owes
         // nothing: the Dock restarted and read the preference, or it applied a
@@ -362,7 +412,7 @@ final class SpacesOrderHold {
             saveJournal(nil)
             // The Dock now runs what the preference says, so the usual step
             // finishes the change.
-            return reconcile(wanted: wanted)
+            return reconcileOnQueue(wanted: wanted, generation: generation)
         case .none:
             // The preference already says what the Dock runs, so a restart is
             // not owed either.
@@ -371,27 +421,23 @@ final class SpacesOrderHold {
         case .hold(let restore):
             // Saved before the system setting changes, so a crash in between
             // still knows what to put back.
-            defaults.set(restore, forKey: DefaultsKey.spacesOrderRestore)
-            defaults.synchronize()
-            let result = apply(rearranging: false, removeKey: false, held: held)
+            guard saveMarker(restore) else { return false }
+            let result = apply(rearranging: false, removeKey: false, current: current, held: held)
             guard result.done else {
-                // A marker this hold created goes only if nothing changed or
-                // can still change: a live call the Dock accepted may land
-                // after its checks ran out, and a preference written without
-                // its restart still has to return.
-                if marker == nil, !result.liveAccepted, !result.wrote { clearMarker() }
+                // A failed synchronization can still have changed the value.
+                // Only a confirmed unchanged value lets this new marker go.
+                if marker == nil, result.unchanged { clearMarker() }
                 return false
             }
             return true
         case .remember:
-            defaults.set(SpacesOrderSupport.restoreOff, forKey: DefaultsKey.spacesOrderRestore)
-            defaults.synchronize()
+            guard saveMarker(SpacesOrderSupport.restoreOff) else { return false }
             // The Dock already runs a fixed order, or the step would have
             // restarted it first, so no restart is owed.
             if held != nil { saveJournal(nil) }
             return true
         case .release(let removeKey):
-            let result = apply(rearranging: true, removeKey: removeKey, held: held)
+            let result = apply(rearranging: true, removeKey: removeKey, current: current, held: held)
             // Once the user's setting is back in the preference nothing more is
             // owed to them, so a later change of theirs stands. A restart the
             // Dock still owes is left to the journal. Without the write the
@@ -403,112 +449,94 @@ final class SpacesOrderHold {
             if held != nil { saveJournal(nil) }
             return true
         case .letGo:
-            letGo()
+            letGo(generation: generation)
             return true
         }
     }
 
-    /// Clears the marker and turns the toggle off on the main thread, where
-    /// the settings views follow both. Off the main thread the two writes are
-    /// handed over without waiting: a removal waiting on the main thread for
-    /// this queue would never let a waiting hand-off through. Until they land
-    /// the state still reads as a let-go, and a repeated one changes nothing.
-    private func letGo() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [self] in
-                letGo()
-                // A sync that handed this over read the toggle while it was
-                // still on, so the watch it kept stops here.
-                queue.async { [self] in watch(isWanted) }
+    /// Only the toggle is published on main. Recovery stays on the serial
+    /// queue, and its identity keeps an accepted reply from clearing a newer
+    /// hold. No worker waits for this reply, including during removal.
+    private func letGo(generation: UInt64) {
+        let owner = markerGeneration
+        DispatchQueue.main.async { [self] in
+            requestLock.lock()
+            defer { requestLock.unlock() }
+            guard generation == requestGeneration else { return }
+            pendingLetGoOwner = owner
+            defaults.set(false, forKey: DefaultsKey.spacesOrderEnabled)
+            let persisted = defaults.synchronize()
+            // A reentrant observer can request another sync or change the
+            // toggle. Never clear recovery for a different current choice.
+            guard !defaults.bool(forKey: DefaultsKey.spacesOrderEnabled) else {
+                if pendingLetGoOwner == owner { pendingLetGoOwner = nil }
+                return
             }
-            return
+            guard persisted else { return }
+            if pendingLetGoOwner == owner { pendingLetGoOwner = nil }
+            // New syncs requested during publication wait on requestLock at
+            // admission. They cannot forget recovery using an unpersisted off.
+            queue.async { [self] in
+                if markerGeneration == owner {
+                    clearMarker()
+                    watch(false)
+                } else {
+                    watch(isWanted)
+                }
+            }
+            Self.log.info("Space rearranging was turned back on outside Vorssaint; fixed order turned off")
         }
-        clearMarker()
-        defaults.set(false, forKey: DefaultsKey.spacesOrderEnabled)
-        defaults.synchronize()
-        Self.log.info("Space rearranging was turned back on outside Vorssaint; fixed order turned off")
     }
 
-    /// The Dock's own call applies at once. Only when it is missing or does not
-    /// take effect is the preference written directly, with one Dock restart
-    /// to read it. Also reports whether the Dock accepted the live call, which
-    /// can still take effect after its checks ran out, and whether the
-    /// preference now holds the change.
-    private func apply(rearranging: Bool, removeKey: Bool,
-                       held: SpacesOrderSupport.RestartJournal?) -> (done: Bool, liveAccepted: Bool, wrote: Bool) {
-        let liveAccepted = system.setLive(rearranging)
-        if liveAccepted, confirm(rearranging) {
-            // A missing key and an explicit on behave the same; removing it
-            // leaves the preference exactly as it was found.
-            if removeKey { _ = system.write(nil) }
-            // The Dock took the change itself, so it runs what the preference says.
-            if held != nil { saveJournal(nil) }
-            return (true, true, true)
-        }
+    /// Write the preference before restarting the Dock. Avoid an unconfirmed
+    /// live request that could arrive after restoration or removal completed.
+    private func apply(rearranging: Bool, removeKey: Bool, current: SpacesRearrangeSetting,
+                       held: SpacesOrderSupport.RestartJournal?) -> (done: Bool, wrote: Bool, unchanged: Bool) {
         let value: SpacesRearrangeSetting = removeKey ? .absent : (rearranging ? .on : .off)
         // Saved before the preference changes, so an interruption before the
         // write or before the restart is still recovered by the next sync. A
         // Dock that still owes a restart runs what it ran; any other runs what
         // the preference says now, the opposite of this change.
         let dockRuns = held?.dockRuns ?? (rearranging ? .fixed : .rearranging)
-        saveJournal(SpacesOrderSupport.RestartJournal(dockPID: held?.dockPID ?? system.dockPID() ?? 0,
-                                                      dockRuns: dockRuns, wrote: (held?.wrote ?? []) + [value]))
+        guard saveJournal(SpacesOrderSupport.RestartJournal(dockPID: held?.dockPID ?? system.dockPID() ?? 0,
+                                                            dockRuns: dockRuns, wrote: (held?.wrote ?? []) + [value]))
+        else { return (false, false, true) }
         guard system.write(removeKey ? nil : rearranging) else {
-            saveJournal(held)
-            return (false, liveAccepted, false)
+            // A false synchronization result does not undo SetValue. Read it
+            // back before deciding whether this attempt changed anything.
+            let after = system.read()
+            if after == current { saveJournal(held) }
+            return (false, after == value, after == current)
         }
         // A Dock that still runs this change needs no restart to read it.
         guard SpacesOrderSupport.DockState(value) != dockRuns else {
             saveJournal(nil)
-            return (true, liveAccepted, true)
+            return (true, true, false)
         }
-        guard system.restartDock() else { return (false, liveAccepted, true) }
+        guard system.restartDock() else { return (false, true, false) }
         saveJournal(nil)
-        return (true, liveAccepted, true)
+        return (true, true, false)
     }
 
-    private func confirm(_ rearranging: Bool) -> Bool {
-        for _ in 0..<SpacesOrderSupport.confirmAttempts {
-            system.pause()
-            let current = system.read()
-            if rearranging ? (current == .on || current == .absent) : current == .off { return true }
-        }
-        return false
+    private func saveMarker(_ value: String) -> Bool {
+        markerGeneration &+= 1
+        defaults.set(value, forKey: DefaultsKey.spacesOrderRestore)
+        return defaults.synchronize()
     }
 
     private func clearMarker() {
+        markerGeneration &+= 1
         defaults.removeObject(forKey: DefaultsKey.spacesOrderRestore)
         defaults.synchronize()
     }
 
-    private func saveJournal(_ journal: SpacesOrderSupport.RestartJournal?) {
+    @discardableResult
+    private func saveJournal(_ journal: SpacesOrderSupport.RestartJournal?) -> Bool {
         if let journal {
             defaults.set(journal.encoded, forKey: DefaultsKey.spacesOrderRestartPending)
         } else {
             defaults.removeObject(forKey: DefaultsKey.spacesOrderRestartPending)
         }
-        defaults.synchronize()
-    }
-}
-
-/// The Dock's settings call has no public equivalent. Resolve it at runtime
-/// so its removal only leaves the direct preference write.
-private enum DockSettingsCall {
-    typealias SetPreferences = @convention(c) (CFDictionary) -> Int32
-    // Retain the handle for the lifetime of the function pointer.
-    static let handle = dlopen(
-        "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices",
-        RTLD_LAZY | RTLD_LOCAL)
-    static let setPreferences: SetPreferences? = {
-        guard let handle, let address = dlsym(handle, "CoreDockSetPreferences") else { return nil }
-        return unsafeBitCast(address, to: SetPreferences.self)
-    }()
-
-    static func set(rearranging: Bool) -> Bool {
-        guard let setPreferences else { return false }
-        // The returned status has no known meaning; reading the preference
-        // back is the only confirmation.
-        _ = setPreferences([SpacesOrderSupport.liveKey: rearranging] as CFDictionary)
-        return true
+        return defaults.synchronize()
     }
 }

@@ -56,6 +56,8 @@ enum DefaultsKey {
     static let scrollHorizontalModifier = "scrollHorizontalModifier"
     static let focusFollowsMouseEnabled = "focusFollowsMouseEnabled"
     static let focusFollowsMouseDelay = "focusFollowsMouseDelayMilliseconds"
+    static let focusFollowsMouseRaise = "focusFollowsMouseRaise"
+    static let focusFollowsMouseWaitForStop = "focusFollowsMouseWaitForStop"
     static let focusFollowsMouseExceptions = "focusFollowsMouseExceptions"
     static let smoothScrollEnabled = "smoothScrollEnabled"
     static let smoothScrollStep = "smoothScrollStep"      // pixels per wheel tick
@@ -217,6 +219,8 @@ enum DefaultsKey {
     // Set once the paths cached before paired discovery requests have been
     // dropped, so a monitor written off then is classified again exactly once.
     static let brightnessDDCWriteOnlyPathsRechecked = "brightnessDDCWriteOnlyPathsRechecked"
+    /// A beta already installed the companion for this Command Bar user, once.
+    static let notchMascotBetaInstalled = "notchMascotBetaInstalled"
     // Per-monitor connection paths a person has told this app to dim in
     // software: the only way to know a write-only channel swallows its writes
     // is to watch the panel, which no probe can do. Issue #1589.
@@ -428,6 +432,7 @@ enum DefaultsKey {
     static let monitorGraphDisk = "monitorGraphDisk"
     static let monitorGraphPower = "monitorGraphPower"
     static let monitorGraphBattery = "monitorGraphBattery"
+    static let monitorGraphScale = "monitorGraphScale"
     // System monitor — per-item visibility inside each panel section.
     static let monitorSysTemps = "monitorSysTemps"
     static let monitorSysCPU = "monitorSysCPU"
@@ -481,6 +486,7 @@ enum DefaultsKey {
     static let windowLayoutHiddenActions = "windowLayoutHiddenActions" // comma-separated action ids hidden from the grid
     static let windowLayoutWindowGap = "windowLayoutWindowGap" // px between adjacent snapped windows
     static let windowLayoutScreenGap = "windowLayoutScreenGap" // px between a snapped window and the visible frame edge
+    static let windowLayoutMarginPercent = "windowLayoutMarginPercent" // per-edge percentage for margin maximize
     static let windowLayoutSideRepeatCyclesThirds = "windowLayoutSideRepeatCyclesThirds" // repeated Left/Right cycles half, 2/3, 1/3 on the same display
     static let windowLayoutIgnoredApps = "windowLayoutIgnoredApps" // apps that temporarily disable window layout while focused
     static let panelCollapsedSections = "panelCollapsedSections"
@@ -817,20 +823,27 @@ enum DefaultsKey {
     static let notchQueueEnabled = "notchQueueEnabled"
     static let notchDownloadsEnabled = "notchDownloadsEnabled"
     static let notchDownloadsFolderBookmark = "notchDownloadsFolderBookmark"
+    // Watch: any part of any window read live in the island.
+    static let notchWatchEnabled = "notchWatchEnabled"
+    static let notchWatchSound = "notchWatchSound"
+    static let notchWatchCondition = "notchWatchCondition"
     static let notchCalendarEnabled = "notchCalendarEnabled"
     static let notchCalendarCountdown = "notchCalendarCountdown"
     static let notchCalendarTimeLeft = "notchCalendarTimeLeft" // the event under way counts down to its end
     static let notchCalendarExcluded = "notchCalendarExcluded" // [EKCalendar.calendarIdentifier] left out of the island
     // [countdown key: event end] chosen from an event's menu; unregistered, so it stays out of backups
     static let notchCalendarChosenCountdowns = "notchCalendarChosenCountdowns"
-    // AI agents: what the island reads from Claude Code and Codex, and shows.
+    // AI agents: what the island reads from Claude Code, Codex, OpenCode and GitHub Copilot, and shows.
     static let notchAgentsEnabled = "notchAgentsEnabled"
     static let notchAgentsClaude = "notchAgentsClaude"
     static let notchAgentsCodex = "notchAgentsCodex"
+    static let notchAgentsOpenCode = "notchAgentsOpenCode"
+    static let notchAgentsCopilot = "notchAgentsCopilot"
     static let notchAgentsCardOrder = "notchAgentsCardOrder"
     static let notchAgentsHiddenCards = "notchAgentsHiddenCards"
     static let notchAgentsPeriod = "notchAgentsPeriod"
     static let notchAgentsLimitDisplay = "notchAgentsLimitDisplay"
+    static let notchAgentsLimitFocus = "notchAgentsLimitFocus"
     static let notchAgentsLiveActivity = "notchAgentsLiveActivity"
     static let notchAgentsReadout = "notchAgentsReadout"
     static let notchAgentsFinishAlert = "notchAgentsFinishAlert"
@@ -874,6 +887,17 @@ enum DefaultsKey {
     static let notchShowInCaptures = "notchShowInCaptures"
     static let notchLockScreen = "notchLockScreen" // music and live activities over the lock screen
     static let notchLockSounds = "notchLockSounds" // padlock sounds as the Mac locks and unlocks
+    // Companion: a small friend who rests in the closed island and is the Command Bar's face.
+    static let notchMascotEnabled = "notchMascotEnabled"
+    static let notchMascotVisits = "notchMascotVisits" // passes through the island now and then
+    static let notchMascotReactions = "notchMascotReactions" // comes out to react to what the island sees
+    static let notchMascotStyle = "notchMascotStyle" // NotchMascotStyle.rawValue
+    static let notchMascotShape = "notchMascotShape" // NotchMascotShape.rawValue
+    static let notchMascotPalette = "notchMascotPalette" // NotchMascotPalette.rawValue
+    static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
+    static let notchMascotVisitFrequency = "notchMascotVisitFrequency" // NotchMascotVisitFrequency.rawValue
+    static let notchCommandBar = "notchCommandBar" // the Command Bar comes out of the island
+    static let notchCommandBarStyle = "notchCommandBarStyle" // NotchCommandBarStyle.rawValue
     // Legacy inverse preference; the explicit visibility switch supersedes it.
     static let notchHideInCaptures = "notchHideInCaptures"
     static let panelControlNotch = "panelControlNotch"
@@ -1148,6 +1172,8 @@ enum Defaults {
         DefaultsKey.scrollHorizontalModifier: ScrollHorizontalModifier.shift.rawValue,
         DefaultsKey.focusFollowsMouseEnabled: false,
         DefaultsKey.focusFollowsMouseDelay: FocusFollowsMouseSupport.defaultDelayMilliseconds,
+        DefaultsKey.focusFollowsMouseRaise: true,
+        DefaultsKey.focusFollowsMouseWaitForStop: true,
         DefaultsKey.smoothScrollEnabled: false,
         DefaultsKey.smoothScrollStep: 40,
         DefaultsKey.linearScrollEnabled: false,
@@ -1376,10 +1402,13 @@ enum Defaults {
         DefaultsKey.notchAgentsEnabled: true,
         DefaultsKey.notchAgentsClaude: true,
         DefaultsKey.notchAgentsCodex: true,
+        DefaultsKey.notchAgentsOpenCode: true,
+        DefaultsKey.notchAgentsCopilot: true,
         DefaultsKey.notchAgentsCardOrder: "",
         DefaultsKey.notchAgentsHiddenCards: "",
         DefaultsKey.notchAgentsPeriod: AgentPeriod.today.rawValue,
         DefaultsKey.notchAgentsLimitDisplay: NotchAgentLimitDisplay.remaining.rawValue,
+        DefaultsKey.notchAgentsLimitFocus: NotchAgentLimitFocus.mostUsed.rawValue,
         DefaultsKey.notchAgentsLiveActivity: true,
         DefaultsKey.notchAgentsReadout: NotchAgentReadout.elapsed.rawValue,
         DefaultsKey.notchAgentsFinishAlert: true,
@@ -1393,6 +1422,9 @@ enum Defaults {
         DefaultsKey.notchLiveEqualizer: false,
         DefaultsKey.notchQueueEnabled: true,
         DefaultsKey.notchDownloadsEnabled: true,
+        DefaultsKey.notchWatchEnabled: true,
+        DefaultsKey.notchWatchSound: true,
+        DefaultsKey.notchWatchCondition: NotchWatchCondition.changes.rawValue,
         DefaultsKey.notchEnabled: false,
         DefaultsKey.notchDisplay: NotchDisplay.automatic.rawValue,
         DefaultsKey.notchSilhouette: NotchSilhouette.capsule.rawValue,
@@ -1422,6 +1454,16 @@ enum Defaults {
         DefaultsKey.notchShowInCaptures: true,
         DefaultsKey.notchLockScreen: false,
         DefaultsKey.notchLockSounds: false,
+        DefaultsKey.notchMascotEnabled: false,
+        DefaultsKey.notchMascotVisits: true,
+        DefaultsKey.notchMascotReactions: true,
+        DefaultsKey.notchMascotStyle: NotchMascotStyle.minimal.rawValue,
+        DefaultsKey.notchMascotShape: NotchMascotShape.ball.rawValue,
+        DefaultsKey.notchMascotPalette: NotchMascotPalette.pearl.rawValue,
+        DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
+        DefaultsKey.notchMascotVisitFrequency: NotchMascotVisitFrequency.normal.rawValue,
+        DefaultsKey.notchCommandBar: true,
+        DefaultsKey.notchCommandBarStyle: NotchCommandBarStyle.droplet.rawValue,
         DefaultsKey.notchHideInCaptures: false,
         DefaultsKey.panelControlNotch: true,
         DefaultsKey.radialMenuEnabled: false,
@@ -1529,6 +1571,7 @@ enum Defaults {
         DefaultsKey.windowLayoutHiddenActions: "",
         DefaultsKey.windowLayoutWindowGap: 0,
         DefaultsKey.windowLayoutScreenGap: 0,
+        DefaultsKey.windowLayoutMarginPercent: 5.0,
         DefaultsKey.windowLayoutSideRepeatCyclesThirds: false,
         DefaultsKey.menuBarMetricOrder: defaultMenuBarMetricOrder.joined(separator: ","),
         DefaultsKey.menuBarCombineTemperatures: true,
@@ -1559,6 +1602,7 @@ enum Defaults {
         DefaultsKey.monitorGraphDisk: true,
         DefaultsKey.monitorGraphPower: true,
         DefaultsKey.monitorGraphBattery: true,
+        DefaultsKey.monitorGraphScale: true,
         // Every per-item block shows by default; users hide what they don't want.
         DefaultsKey.monitorSysTemps: true,
         DefaultsKey.monitorSysCPU: true,
@@ -1852,6 +1896,7 @@ enum Defaults {
         defaults.register(defaults: registeredDefaults)
         defaults.register(defaults: AppFeature.availabilityDefaults)
         activateBetaChannelIfRunningBeta(in: defaults)
+        installCompanionForBetaCommandBar(in: defaults)
         migrateLegacyMenuBarTemperatureMetric(in: defaults)
         migrateLegacySwitcherWindowShortcut(in: defaults)
         migrateLegacyKeyboardDebounceWindow(in: defaults)
@@ -1997,6 +2042,23 @@ enum Defaults {
         guard !defaults.bool(forKey: markerKey) else { return }
         defaults.set(true, forKey: markerKey)
         defaults.set(true, forKey: DefaultsKey.includeBetaUpdates)
+    }
+
+    /// On a beta, people with the Command Bar get the island's companion,
+    /// which can be its face, installed and on, once: uninstalled afterwards,
+    /// it stays out. A clean install waits for its setup to finish, since
+    /// setup picks the installed features afresh.
+    static func installsCompanionForBeta(in defaults: UserDefaults, isBeta: Bool = AppInfo.isBeta) -> Bool {
+        isBeta && defaults.bool(forKey: DefaultsKey.hasOnboarded)
+            && !defaults.bool(forKey: DefaultsKey.notchMascotBetaInstalled)
+            && AppFeature.commandBar.isAvailable(in: defaults)
+    }
+
+    static func installCompanionForBetaCommandBar(in defaults: UserDefaults, isBeta: Bool = AppInfo.isBeta) {
+        guard installsCompanionForBeta(in: defaults, isBeta: isBeta) else { return }
+        defaults.set(true, forKey: DefaultsKey.notchMascotBetaInstalled)
+        defaults.set(true, forKey: AppFeature.notchMascot.availabilityKey)
+        defaults.set(true, forKey: DefaultsKey.notchMascotEnabled)
     }
 
     /// The downloads cleanup for a messaging app used to sit in Cleaner for

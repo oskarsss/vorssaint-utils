@@ -344,6 +344,7 @@ struct Strings {
     let middleClickEnable: String
     let middleClickEnableCaption: String
     let middleClickDragConflict: String
+    let middleClickNoTrackpad: String
     let middleClickTapPicker: String
     let middleClickTapOff: String
     let middleClickTapThreeFingers: String
@@ -567,6 +568,8 @@ struct Strings {
     let homebrewNoPackages: String
     let homebrewDependencies: String
     let homebrewGroupDependencies: String
+    let homebrewOrphans: String
+    let homebrewOrphansNote: String
     let homebrewNoSelection: String
     let homebrewDetailsTitle: String
     let homebrewInstall: String
@@ -986,7 +989,6 @@ struct Strings {
     let monitorShowPeripheralBattery: String
     let peripheralBatteryNoDevices: String
     let monitorGraphsSection: String
-    let monitorGraphsCaption: String
 
     // MARK: Update notification + onboarding menu bar setup
     let updateBannerTitle: String
@@ -1265,6 +1267,8 @@ struct Strings {
     let focusFollowsMouseName: String
     let focusFollowsMouseCaption: String
     let focusFollowsMouseDelay: String
+    let focusFollowsMouseRaise: String
+    let focusFollowsMouseWaitForStop: String
     let switcherMinimizedPlacementLabel: String
     let switcherTreatHiddenAppsLikeMinimized: String
     let switcherMinimizedPlacementNormal: String
@@ -1467,10 +1471,11 @@ extension Strings {
         mouseNavigationSection: "Navegação",
         mouseNavigationEnable: "Usar botões laterais para voltar e avançar",
         mouseNavigationCaption: "Converte os botões Voltar e Avançar do mouse em comandos de navegação no Finder, navegadores e apps compatíveis.",
-        middleClickSection: "Botão do meio",
+        middleClickSection: "Botão do meio no trackpad",
         middleClickEnable: "Clique com três dedos vira botão do meio",
         middleClickEnableCaption: "Pressionar o trackpad com três dedos funciona como o clique da rodinha do mouse: abre links em nova aba, fecha abas e tudo mais que o botão do meio faz.",
-        middleClickDragConflict: "O arrastar com três dedos do macOS está ativado e usa esse mesmo gesto. Desative-o nos Ajustes do Sistema em Acessibilidade, Controle do Cursor, Opções do Trackpad, e o clique do meio vai funcionar.",
+        middleClickDragConflict: "O arrastar com três dedos do macOS está ativado e usa três dedos, então clique com quatro dedos para o clique do meio. Para usar três, desative-o nos Ajustes do Sistema em Acessibilidade, Controle do Cursor, Opções do Trackpad.",
+        middleClickNoTrackpad: "Não é possível ler os toques no trackpad. Conecte um trackpad compatível.",
         middleClickTapPicker: "Toque leve também clica",
         middleClickTapOff: "Desligado",
         middleClickTapThreeFingers: "3 dedos",
@@ -1491,11 +1496,11 @@ extension Strings {
         micUnmuteName: "Reativar microfone",
         micMuteCaption: "Corta o microfone do Mac com um clique ou atalho, valendo para qualquer app.",
         micMutedHUD: "Microfone silenciado",
-        micUnmutedHUD: "Microfone reativado",
+        micUnmutedHUD: "Silenciamento desativado",
         micMutePartialHUD: "Alguns microfones não puderam ser silenciados",
         micUnmutePartialHUD: "Alguns microfones continuam silenciados",
         micMuteMenuBarToggle: "Mostrar na barra de menus enquanto silenciado",
-        micMuteMenuBarCaption: "Um microfone cortado em vermelho aparece ao lado do ícone do app na barra de menus.",
+        micMuteMenuBarCaption: "Um microfone cortado em vermelho aparece ao lado do ícone do app na barra de menus enquanto este recurso o silencia.",
         pastePlainName: "Colar como texto puro",
         pastePlainCaption: "Cola o que foi copiado sem cores, fontes ou formatação. O conteúdo original continua no clipboard.",
         launcherName: "Painel rápido",
@@ -1625,7 +1630,7 @@ extension Strings {
         uninstallerCancel: "Cancelar",
         uninstallerConfirmationExpired: "Esta confirmação não é mais válida. Revise os itens atuais e confirme de novo.",
         uninstallerDoneTitle: "Pronto!",
-        uninstallerFreedFormat: "%@ recuperados",
+        uninstallerFreedFormat: "%@ removidos",
         uninstallerSomeFailed: "Alguns itens não puderam ser movidos para a Lixeira.",
         uninstallerFailedNeedsFDA: "Os dados de apps em área restrita só podem ser movidos com Acesso Total ao Disco. A senha de administrador não substitui essa permissão.",
         uninstallerFailedMoreFormat: "e mais %d",
@@ -1688,6 +1693,8 @@ extension Strings {
         homebrewNoPackages: "Nenhum pacote encontrado",
         homebrewDependencies: "Dependências",
         homebrewGroupDependencies: "Agrupar dependências",
+        homebrewOrphans: "Não são mais necessárias",
+        homebrewOrphansNote: "Instaladas como dependências, mas nenhum pacote instalado precisa mais delas.",
         homebrewNoSelection: "Selecione um pacote instalado ou pesquise um novo.",
         homebrewDetailsTitle: "Detalhes do pacote",
         homebrewInstall: "Instalar",
@@ -2086,7 +2093,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Bateria dos periféricos",
         peripheralBatteryNoDevices: "Nenhum periférico encontrado",
         monitorGraphsSection: "Gráficos",
-        monitorGraphsCaption: "Escolha quais métricas mostram um gráfico ao longo do tempo.",
 
         updateBannerTitle: "Atualização disponível",
         updateBannerAction: "Atualizar",
@@ -2352,8 +2358,10 @@ extension Strings {
         shelfEdgeToggle: "Abrir perto de uma borda da tela",
         shelfEdgeCaption: "Ao arrastar um arquivo para perto da borda da tela, a área espia para dentro. Solte ali, ou puxe de volta e ela recua.",
         focusFollowsMouseName: "Foco ao passar o mouse",
-        focusFollowsMouseCaption: "Coloca em foco e traz para frente a janela sob o ponteiro após uma breve pausa.",
+        focusFollowsMouseCaption: "Coloca em foco a janela sob o ponteiro.",
         focusFollowsMouseDelay: "Atraso ao passar o mouse",
+        focusFollowsMouseRaise: "Trazer a janela para frente",
+        focusFollowsMouseWaitForStop: "Esperar o ponteiro parar",
         switcherMinimizedPlacementLabel: "Janelas minimizadas",
         switcherTreatHiddenAppsLikeMinimized: "Tratar apps ocultos como janelas minimizadas",
         switcherMinimizedPlacementNormal: "Ordem normal",
@@ -2557,10 +2565,11 @@ extension Strings {
         mouseNavigationSection: "Navigation",
         mouseNavigationEnable: "Use side buttons for Back and Forward",
         mouseNavigationCaption: "Turns the mouse Back and Forward buttons into navigation commands in Finder, browsers and compatible apps.",
-        middleClickSection: "Middle click",
+        middleClickSection: "Trackpad middle click",
         middleClickEnable: "Three-finger click acts as middle click",
         middleClickEnableCaption: "Pressing the trackpad with three fingers works like a mouse wheel click: open links in a new tab, close tabs and everything else the middle button does.",
-        middleClickDragConflict: "macOS three-finger drag is turned on and uses this same gesture. Turn it off in System Settings under Accessibility, Pointer Control, Trackpad Options, and the middle click will work.",
+        middleClickDragConflict: "macOS three-finger drag is turned on and uses three fingers, so click with four fingers for the middle click. To use three, turn three-finger drag off in System Settings under Accessibility, Pointer Control, Trackpad Options.",
+        middleClickNoTrackpad: "Can’t read trackpad touches. Connect a supported trackpad.",
         middleClickTapPicker: "A light tap also clicks",
         middleClickTapOff: "Off",
         middleClickTapThreeFingers: "3 fingers",
@@ -2581,11 +2590,11 @@ extension Strings {
         micUnmuteName: "Unmute microphone",
         micMuteCaption: "Cuts the Mac’s microphone with a click or shortcut, across every app.",
         micMutedHUD: "Microphone muted",
-        micUnmutedHUD: "Microphone back on",
+        micUnmutedHUD: "Mute off",
         micMutePartialHUD: "Some microphones could not be muted",
         micUnmutePartialHUD: "Some microphones are still muted",
         micMuteMenuBarToggle: "Show in the menu bar while muted",
-        micMuteMenuBarCaption: "A red crossed-out mic appears beside the app’s icon in the menu bar.",
+        micMuteMenuBarCaption: "A red crossed-out mic appears beside the app’s icon in the menu bar while this feature mutes it.",
         pastePlainName: "Paste as plain text",
         pastePlainCaption: "Pastes what you copied without colors, fonts or formatting. The original stays on the clipboard.",
         launcherName: "Quick panel",
@@ -2715,7 +2724,7 @@ extension Strings {
         uninstallerCancel: "Cancel",
         uninstallerConfirmationExpired: "This confirmation is no longer valid. Review the current items and confirm again.",
         uninstallerDoneTitle: "Done!",
-        uninstallerFreedFormat: "%@ recovered",
+        uninstallerFreedFormat: "%@ removed",
         uninstallerSomeFailed: "Some items couldn’t be moved to the Trash.",
         uninstallerFailedNeedsFDA: "Sandboxed app data can only be moved with Full Disk Access. The administrator password does not stand in for it.",
         uninstallerFailedMoreFormat: "and %d more",
@@ -2778,6 +2787,8 @@ extension Strings {
         homebrewNoPackages: "No packages found",
         homebrewDependencies: "Dependencies",
         homebrewGroupDependencies: "Group dependencies",
+        homebrewOrphans: "No longer needed",
+        homebrewOrphansNote: "Installed as dependencies, but no installed package needs them any more.",
         homebrewNoSelection: "Select an installed package or search for a new one.",
         homebrewDetailsTitle: "Package details",
         homebrewInstall: "Install",
@@ -3176,7 +3187,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Peripheral battery",
         peripheralBatteryNoDevices: "No devices found",
         monitorGraphsSection: "Graphs",
-        monitorGraphsCaption: "Choose which metrics show a graph over time.",
 
         updateBannerTitle: "Update available",
         updateBannerAction: "Update",
@@ -3442,8 +3452,10 @@ extension Strings {
         shelfEdgeToggle: "Open near a screen edge",
         shelfEdgeCaption: "Drag a file toward the screen edge to peek the shelf in. Drop it there, or pull back and it retreats.",
         focusFollowsMouseName: "Focus follows mouse",
-        focusFollowsMouseCaption: "Focuses and raises the window under the pointer after a short pause.",
+        focusFollowsMouseCaption: "Focuses the window under the pointer.",
         focusFollowsMouseDelay: "Hover delay",
+        focusFollowsMouseRaise: "Bring the window to the front",
+        focusFollowsMouseWaitForStop: "Wait for the pointer to stop",
         switcherMinimizedPlacementLabel: "Minimized windows",
         switcherTreatHiddenAppsLikeMinimized: "Treat hidden apps like minimized windows",
         switcherMinimizedPlacementNormal: "Normal ordering",
