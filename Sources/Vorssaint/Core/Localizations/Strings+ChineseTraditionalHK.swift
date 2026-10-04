@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "解除安裝 Vorssaint？",
         advancedUninstallConfirmBody: "Vorssaint 會清除其權限、移除偏好設定並移至垃圾桶，然後結束。此操作無法從 App 內復原，但在你清空垃圾桶之前，它仍會留在垃圾桶內。",
         advancedUninstallFailedTitle: "已停止解除安裝",
-        advancedUninstallFailedBody: "Vorssaint 無法還原它變更過的系統設定：睡眠、風扇轉速或滑鼠加速。沒有移除任何項目。請再試一次，並在出現密碼要求時允許。",
+        advancedUninstallFailedBody: "Vorssaint 無法還原它變更過的系統設定：睡眠、風扇轉速、滑鼠加速或桌面空間順序。沒有移除任何項目。請再試一次，並在出現密碼要求時允許。",
 
         launchAtLogin: "登入時啟動",
         languageLabel: "語言",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "觸控板中鍵點按",
         middleClickEnable: "三指按下作為中鍵點按",
         middleClickEnableCaption: "用三隻手指按下觸控板，效果等同於滑鼠滾輪點按：在新分頁開啟連結、關閉分頁，以及中鍵能做的一切。",
-        middleClickDragConflict: "macOS 的三指拖移已開啟，與此手勢相同。請在系統設定的輔助使用、指標控制、觸控板選項中將其關閉，中鍵點按即可使用。",
+        middleClickDragConflict: "macOS 的三指拖移已開啟並佔用三指，因此請用四指按下來進行中鍵點按。如要使用三指，請在系統設定的輔助使用、指標控制、觸控板選項中將其關閉。",
+        middleClickNoTrackpad: "無法讀取觸控板的觸碰輸入。請連接支援的觸控板。",
         middleClickTapPicker: "輕點也可點按",
         middleClickTapOff: "關閉",
         middleClickTapThreeFingers: "3 隻手指",
@@ -397,6 +398,8 @@ extension Strings {
         homebrewNoPackages: "找不到套件",
         homebrewDependencies: "依賴項目",
         homebrewGroupDependencies: "將依賴項目分組",
+        homebrewOrphans: "不再需要",
+        homebrewOrphansNote: "作為依賴項目安裝，但現時已安裝的套件都不需要它們。",
         homebrewNoSelection: "選取已安裝的套件，或搜尋新的套件。",
         homebrewDetailsTitle: "套件詳情",
         homebrewInstall: "安裝",
@@ -795,7 +798,6 @@ extension Strings {
         monitorShowPeripheralBattery: "外置電池",
         peripheralBatteryNoDevices: "無外置電池",
         monitorGraphsSection: "圖表",
-        monitorGraphsCaption: "選取哪些指標顯示隨時間變化的圖表。",
 
         updateBannerTitle: "有可用更新",
         updateBannerAction: "更新",
@@ -1061,8 +1063,10 @@ extension Strings {
         shelfEdgeToggle: "接近螢幕邊緣時開啟",
         shelfEdgeCaption: "將檔案拖曳至螢幕邊緣，暫存架便會探出一角。放在那裡即可放低，往回拖曳暫存架便會縮回去。",
         focusFollowsMouseName: "游標停留時聚焦",
-        focusFollowsMouseCaption: "游標短暫停留後，聚焦並將其下方視窗移至最前方。",
+        focusFollowsMouseCaption: "聚焦游標下方的視窗。",
         focusFollowsMouseDelay: "停留延遲",
+        focusFollowsMouseRaise: "將視窗移至最前方",
+        focusFollowsMouseWaitForStop: "等待游標停下",
         switcherMinimizedPlacementLabel: "已最小化的視窗",
         switcherTreatHiddenAppsLikeMinimized: "將隱藏的 App 視為已最小化的視窗",
         switcherMinimizedPlacementNormal: "正常順序",
@@ -1086,6 +1090,8 @@ extension Strings {
         shelfClearOnClose: "關閉時清空",
         shelfClearOnCloseCaption: "只有點按關閉按鈕時才會清空暫存架。自動隱藏或收合時會保留項目。",
         shelfShortcutFinderSelection: "使用快捷鍵加入 Finder 所選項目",
-        shelfShortcutFinderSelectionCaption: "Finder 位於前景時，快捷鍵會打開暫存架並放入所選檔案。未選取任何項目時照常打開。"
+        shelfShortcutFinderSelectionCaption: "Finder 位於前景時，快捷鍵會打開暫存架並放入所選檔案。未選取任何項目時照常打開。",
+        spacesOrderName: "固定桌面空間順序",
+        spacesOrderCaption: "避免 macOS 依最近使用情況重新排列桌面空間，讓它們維持你設定的順序。關閉此選項後會恢復先前的設定。為套用變更，Dock 可能會重新啟動一次。"
     )
 }

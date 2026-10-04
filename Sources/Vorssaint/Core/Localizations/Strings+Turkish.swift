@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Vorssaint kaldırılsın mı?",
         advancedUninstallConfirmBody: "Vorssaint izinlerini temizleyecek, tercihlerini kaldıracak ve Çöp Sepeti’ne taşınıp kapanacak. Bu işlem uygulama içinden geri alınamaz, ama Çöp Sepeti’ni boşaltana kadar orada kalır.",
         advancedUninstallFailedTitle: "Kaldırma durduruldu",
-        advancedUninstallFailedBody: "Vorssaint değiştirdiği bir sistem ayarını geri alamadı: uyku, fan hızı veya fare hızlandırması. Hiçbir şey silinmedi. Yeniden deneyin ve parola istenirse izin verin.",
+        advancedUninstallFailedBody: "Vorssaint değiştirdiği bir sistem ayarını geri alamadı: uyku, fan hızı, fare hızlandırması veya Space sırası. Hiçbir şey silinmedi. Yeniden deneyin ve parola istenirse izin verin.",
 
         launchAtLogin: "Oturum açınca başlat",
         languageLabel: "Dil",
@@ -178,8 +178,9 @@ extension Strings {
         mouseNavigationCaption: "Farenin Geri ve İleri düğmelerini Finder, tarayıcılar ve uyumlu uygulamalarda gezinme komutlarına dönüştürür.",
         middleClickSection: "İzleme dörtgeniyle orta tıklama",
         middleClickEnable: "Üç parmakla tıklama orta tıklama olur",
-        middleClickEnableCaption: "Trackpad’e üç parmakla basmak fare tekerleği tıklaması gibi çalışır: bağlantıları yeni sekmede açma, sekmeleri kapatma ve orta düğmenin yaptığı her şey.",
-        middleClickDragConflict: "macOS’un üç parmakla sürükleme özelliği açık ve aynı hareketi kullanıyor. Orta tıklamanın çalışması için Sistem Ayarları’nda Erişilebilirlik, İmleç Denetimi, Trackpad Seçenekleri bölümünden kapatın.",
+        middleClickEnableCaption: "İzleme dörtgenine üç parmakla basmak fare tekerleği tıklaması gibi çalışır: bağlantıları yeni sekmede açma, sekmeleri kapatma ve orta düğmenin yaptığı her şey.",
+        middleClickDragConflict: "macOS’un üç parmakla sürükleme özelliği açık ve üç parmağı kullanıyor; orta tıklama için dört parmakla tıklayın. Üç parmak kullanmak için Sistem Ayarları’nda Erişilebilirlik, İmleç Denetimi, Trackpad Seçenekleri bölümünden kapatın.",
+        middleClickNoTrackpad: "İzleme dörtgenindeki dokunuşlar okunamıyor. Desteklenen bir izleme dörtgeni bağlayın.",
         middleClickTapPicker: "Hafif dokunuş da tıklar",
         middleClickTapOff: "Kapalı",
         middleClickTapThreeFingers: "3 parmak",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "Paket bulunamadı",
         homebrewDependencies: "Bağımlılıklar",
         homebrewGroupDependencies: "Bağımlılıkları grupla",
+        homebrewOrphans: "Artık gerekmeyenler",
+        homebrewOrphansNote: "Bağımlılık olarak kuruldular, ancak artık kurulu hiçbir paket bunlara ihtiyaç duymuyor.",
         homebrewNoSelection: "Yüklü bir paket seç veya yenisini ara.",
         homebrewDetailsTitle: "Paket ayrıntıları",
         homebrewInstall: "Yükle",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Çevre birimi pili",
         peripheralBatteryNoDevices: "Aygıt bulunamadı",
         monitorGraphsSection: "Grafikler",
-        monitorGraphsCaption: "Hangi metriklerin zaman içinde grafik göstereceğini seç.",
 
         updateBannerTitle: "Güncelleme var",
         updateBannerAction: "Güncelle",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "Ekran kenarına yaklaşınca aç",
         shelfEdgeCaption: "Bir dosyayı ekran kenarına doğru sürüklediğinde raf belirmeye başlar. Bıraktığın yerde kalır, ya da geri çekersen raf da geri çekilir.",
         focusFollowsMouseName: "Odak fareyi takip etsin",
-        focusFollowsMouseCaption: "Kısa bir beklemeden sonra işaretçinin altındaki pencereye odaklanır ve öne getirir.",
+        focusFollowsMouseCaption: "İşaretçinin altındaki pencereye odaklanır.",
         focusFollowsMouseDelay: "Üzerinde bekleme gecikmesi",
+        focusFollowsMouseRaise: "Pencereyi öne getir",
+        focusFollowsMouseWaitForStop: "İşaretçinin durmasını bekle",
         switcherMinimizedPlacementLabel: "Küçültülmüş pencereler",
         switcherTreatHiddenAppsLikeMinimized: "Gizli uygulamaları küçültülmüş pencereler gibi işle",
         switcherMinimizedPlacementNormal: "Normal sıralama",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "Kapatınca temizle",
         shelfClearOnCloseCaption: "Rafı yalnızca kapatma düğmesine tıkladığında boşaltır. Otomatik gizleme ve daraltma öğeleri korur.",
         shelfShortcutFinderSelection: "Kısayolla Finder seçimini ekle",
-        shelfShortcutFinderSelectionCaption: "Finder öndeyken kısayol, rafı seçili dosyalar içinde olacak şekilde açar. Hiçbir şey seçili değilse her zamanki gibi açılır."
+        shelfShortcutFinderSelectionCaption: "Finder öndeyken kısayol, rafı seçili dosyalar içinde olacak şekilde açar. Hiçbir şey seçili değilse her zamanki gibi açılır.",
+        spacesOrderName: "Space sırasını sabit tut",
+        spacesOrderCaption: "macOS’un Space’leri son kullanıma göre yeniden sıralamasını engeller, böylece belirlediğiniz sırada kalırlar. Seçenek kapatıldığında önceki ayar geri yüklenir. Değişikliği uygulamak için Dock bir kez yeniden başlayabilir."
     )
 }

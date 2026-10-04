@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Dynamic Island gains an optional companion, a Command Bar that opens from it and notices that fit their content. Watch can follow changes in any part of a window, while AI Agents adds OpenCode and resumes log reading where the last launch stopped. The Volume mixer can send one app to an AirPlay speaker on macOS 27, clipboard searches highlight matches, and screenshots gain faster capture and sharing through temporary links.
+Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI Agents supports more providers. App audio can play through AirPlay, and screenshots gain faster capture and sharing through temporary links. Monitor graphs and settings are easier to read, while window controls and keyboard shortcuts gain more flexibility.
 
 ### Dynamic Island
 - A companion can live in the island. Installed on the Features page, and already installed in betas for people who use the Command Bar, it hops out from behind the camera and rests beside it when nothing else is there, passes through now and then, and comes out over music, the timer and other activities to react to music starting, an event beginning, an AI agent getting to work or finishing, its limit renewing, a finished download, what Watch waited for, the charger, Keep Awake, the microphone, a screenshot or the Mac unlocking. It stays beside the camera while the island opens and closes, steps into the notices it reacts to and hops back after, watches the last five seconds of a timer and cheers a finished focus session, follows the pointer, can be petted, and grows sleepy after a long rest and stretches when you come back. Its own tab shows it live in a slice of the island, acts out every moment it reacts to under See how it reacts, and has Say Hi to see it in the island. Choose its Style, Shape, Color and Side of the camera, how often it appears and whether it reacts. Settings → Dynamic Island → Companion.
@@ -27,19 +27,53 @@ Dynamic Island gains an optional companion, a Command Bar that opens from it and
 - Up next shows each song's cover when the player shares one, and the list no longer blanks out for a moment on next or previous.
 - On the Clipboard page, Return or Enter pastes the first entry before any arrow is pressed, as the history window does. Without Accessibility it copies the entry.
 - The AI Agents page follows OpenCode too, next to Claude Code and Codex. Its tokens, costs, models and working tasks come from OpenCode's own database on this Mac, which is read again at each launch. Settings → Dynamic Island → Content → AI Agents → OpenCode.
+- AI Agents follows GitHub Copilot sessions from local logs, with activity, models, API value and live work. Token totals arrive with shutdown metrics, and history resumes across app launches without duplicating usage or losing turn state. Settings → Dynamic Island → Content → AI Agents → GitHub Copilot.
 - The closed island can show the limit you pick instead of the one closest to running out. Choose Session, Week or Most used, which stays the default. The resting wings, the capsule and the Lock Screen follow the same choice. Settings → Dynamic Island → Content → AI Agents → Limit to show.
-- The AI Agents page picks up where the last launch stopped and reads only what Claude Code and Codex wrote since, instead of every log of the last 13 weeks. What it keeps for that is in the app's cache folder and is deleted when the section is turned off.
+- The AI Agents page picks up where the last launch stopped and reads only what Claude Code, Codex and GitHub Copilot wrote since, instead of every log of the last 13 weeks. What it keeps for that is in the app's cache folder and is deleted when the section is turned off.
 
 ### Added
+- Window layout accepts pointer shortcuts made only of modifiers. Maximize with Margin now has an adjustable margin.
+- An optional fixed Spaces order stops macOS from rearranging desktops by recent use and restores your previous choice when turned off.
+- Port Manager rows can copy their port, PID or address and open TCP listeners in a browser.
+- App usage lists offer Force Kill in their context menu when Kill Process is installed, with confirmation.
+- Return or keypad Enter confirms and copies the selected color, then closes the color picker.
+
 - The recording editor's Copy button has a menu with Copy as GIF, which copies the edited recording as an animated GIF ready to paste. Copy and ⌘C still copy the video.
 - After a screenshot is saved or copied automatically, the confirmation preview can be turned off, or kept for 1, 2, 3, 5 or 10 seconds or until dismissed. A failed or partial action still shows it, and a preview kept until dismissed has a close button and leaves the keyboard with the app in front. Settings → Screen capture → Screenshot → More options → Show confirmation preview and Confirmation duration, shown when the default action saves or copies.
 - A new shortcut, off by default (⌃⌥⌘U), uploads the latest screenshot as a temporary link and copies the link. The floating preview's link button uploads with that default expiry on a click and its arrow picks another one, and a copied link closes the preview. A capture that went through the editor or was discarded is never uploaded by the shortcut. Settings → Screen capture → Temporary links → Upload latest screenshot and Default link expiry.
 
 - On macOS 27 and later, the Volume mixer can send one app to an AirPlay speaker while everything else keeps playing where it was. Choose AirPlay in the app's output menu, and Choose AirPlay speaker… in the same menu to pick or change the speaker, in the menu bar panel, Settings and the island's mixer page.
-- Clipboard searches highlight the words they matched in the history window, the menu bar panel's Clipboard tab and Dynamic Island's Clipboard page.
+- Clipboard searches highlight the words they matched in the history window, the menu bar panel's Clipboard tab and Dynamic Island's Clipboard page. Control-N and Control-P move through clipboard history while searching or browsing.
 - The screenshot selection shows a Full screen button near the top of the display under the pointer, which captures that whole display in one click.
 
+- Option-Up and Option-Down move the current line or selected lines in Scratchpad, including inside Dynamic Island, and in the snippet editor.
+- Focus follows mouse can give a window keyboard focus without bringing it to the front. With raising turned off, it can also focus while the pointer moves instead of waiting for it to stop.
+
+### Changed
+- Monitor settings put each reading's display options beside its compact label, with separate groups for the menu bar, panel and shared settings. History graphs now show their scale.
+- The Settings sidebar groups tools like the Features page and removes the duplicate Clipboard row.
+- With Group dependencies on, Homebrew lists dependencies that no installed package needs in a separate No longer needed group. Those with pending updates stay beside the other updates.
+- Deleting a Radial Menu profile now asks for confirmation and names the profile and what will be removed.
+- Trackpad middle click is named explicitly, and cleanup, microphone, quit-protection and Command Bar privacy messages more accurately describe what happens.
+
 ### Fixed
+- Clipboard history reopens at the top and searches large histories more efficiently.
+- Keep Awake can select helper apps bundled inside another app as running-app triggers and notices when they start or quit.
+- With macOS three-finger drag enabled, a four-finger trackpad press now works as a middle click.
+- Confirming Quit Protection for Steam now exits the app instead of only closing its window.
+- Maximize windows no longer restores the old size when a window moved from another display stays wider than the space beside the Dock.
+- Dock Preview no longer enlarges the gaps with Large and Extra large cards. Small stays compact.
+- Support thank-you messages use a white heart in dark mode so it stays visible.
+- Settings backups leave recording and screenshot folders and the replacement music app path on their own Mac, preserving the receiving Mac's choices when restored.
+- The system monitor moves byte sizes and rates to the next unit when rounding reaches its boundary. Out-of-range SMART usage values no longer crash the app during a disk refresh.
+- Checking or using a banked Codex reset no longer refreshes plugin marketplaces.
+- App Switcher stops raising a window again after a Space switch has already focused it.
+- Window captures keep attached sheets and dialogs when the window spans two displays, including displays with different scales.
+- Fast magnifier zoom crosses the range in a few mouse-wheel notches, while stepped zoom and trackpads keep their pace.
+- Clipboard settings has one Clear unpinned button. Pinned entries stay, and the Command Bar still finds the action by its former names.
+- The Command Bar's Kill Process rows follow the sort order selected on the Kill Process page.
+- App shortcuts in the Command Bar now offer to take over a macOS shortcut while Vorssaint runs, just like other shortcut settings.
+- Trackpad middle click explains when no readable trackpad is available and updates the warning as devices disconnect and reconnect.
 - Searching a feature in the Command Bar, such as Keep awake or Shelf, lists its switch or main command first, then its presets, then its Settings page, instead of the Settings page first and the switch last.
 - Dynamic Island keeps the current song on screen while a web player loads the next one, instead of briefly showing another player's paused song. With the New track indicator on, a new song appears in the indicator before the compact island, even when it takes a while to load.
 - With Automatically include videos and other apps on, Dynamic Island switches to a browser that starts playing even while macOS still points to a paused music app.
@@ -59,9 +93,11 @@ Dynamic Island gains an optional companion, a Command Bar that opens from it and
 - Cancelling a GIF export from the recording editor no longer leaves a hidden empty file in the folder it was saving to.
 - Uninstalling with `Tools/uninstall.sh` now removes the password-free closed-lid rule, which the script used to leave behind.
 - The Uninstaller's app pickers and the Command Bar's Uninstall Application list offer only apps it can remove, so Apple's App Store apps, iPhone and iPad apps and linked apps no longer lead back to an empty drop zone. A refused app or a link dragged from a browser springs back from the drop zone instead.
+- Cleaner no longer treats common screenshot renames, such as adding copy or an emoji after the capture time, as untouched captures.
+- App Switcher stays responsive while preparing window previews and keeps showing apps that are too busy to describe their windows in time.
 
 ### Contributors
-Thanks to @69grcv8vfm-sys, @AlirezaBs, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @gorillasuti, @ilim-cell, @iltonandrew, @itsalexcoman, @LeChaEgg, @mikeknight85, @niukanen1, @Qarru, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @thitiwats and @yuzu-octopus. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
+Thanks to @69grcv8vfm-sys, @adhvikrayaprolu, @adnn-alc, @AlirezaBs, @ashwanthbalakrishnan5, @asim-sde, @Bald-M, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @bmrtfm, @claude, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @georgebnov, @gorillasuti, @hartra344, @IanHollow, @ilim-cell, @iltonandrew, @itsalexcoman, @JamesOBrien2, @LeChaEgg, @mikeknight85, @nickciava98, @niukanen1, @nzc0der, @oecer, @ozanuslan, @PathGao, @Qarru, @renan-tiberio, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @schnyders, @shlok1806, @sim-pez, @theafox, @thitiwats, @trac3r00, @yuzu-octopus and @ywu73. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
 
 ## [3.4.1-beta.1] - 2026-09-29
 

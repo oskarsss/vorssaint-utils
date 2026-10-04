@@ -105,9 +105,14 @@ extension AppFeature {
                     from: UserDefaults.standard.string(
                         forKey: DefaultsKey.windowEdgeSnapDisabledZones)
                 ).isEmpty
-            return UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled)
+            let pointerTapRuns = UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled)
                 || edgeSnapRuns
-                ? .pointer : .idle
+            let modifierTapRuns = UserDefaults.standard.bool(forKey: DefaultsKey.windowDirectionalEnabled)
+                && UserDefaults.standard.string(forKey: DefaultsKey.windowDirectionalShortcut)
+                    .flatMap(WindowDirectionalTrigger.init(storageValue:))
+                    .map { if case .modifiers = $0 { return true }; return false } == true
+            if modifierTapRuns { return .inputs }
+            return pointerTapRuns ? .pointer : .idle
         case .radialMenu:
             // A side button or the trackpad tap on any wheel keeps an input
             // tap running; shortcut-only costs nothing at rest.
@@ -141,7 +146,7 @@ extension AppFeature {
                 || BrightnessSupport.KeyStep.sanitized(
                     defaults.string(forKey: DefaultsKey.brightnessKeyStep)) != .standard
                 ? .keyboard : .idle
-        case .mouseAcceleration, .pastePlain, .soundOutputSwitcher, .audioPriority, .micMute,
+        case .mouseAcceleration, .spacesOrder, .pastePlain, .soundOutputSwitcher, .audioPriority, .micMute,
              .bluetoothSleep, .keepAwake, .quickLauncher, .quickToggles, .colorPicker,
              .screenOCR, .cleaningMode, .mediaTools, .cleaner, .uninstaller, .homebrew, .screenshot,
              .cameraPreview, .scratchpad, .commandBar, .screenRecorder, .wallpaper, .fanControl,

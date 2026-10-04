@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "¿Desinstalar Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint borrará sus permisos, eliminará sus preferencias y se moverá a la Papelera; después se cerrará. Esto no se puede deshacer desde la app, pero permanece en la Papelera hasta que la vacíes.",
         advancedUninstallFailedTitle: "La desinstalación se detuvo",
-        advancedUninstallFailedBody: "Vorssaint no pudo restaurar un ajuste del sistema que había cambiado: la suspensión, la velocidad de los ventiladores o la aceleración del ratón. No se eliminó nada. Inténtalo de nuevo y permite la solicitud de contraseña si aparece.",
+        advancedUninstallFailedBody: "Vorssaint no pudo restaurar un ajuste del sistema que había cambiado: la suspensión, la velocidad de los ventiladores, la aceleración del ratón o el orden de los Espacios. No se eliminó nada. Inténtalo de nuevo y permite la solicitud de contraseña si aparece.",
 
         launchAtLogin: "Abrir al iniciar sesión",
         languageLabel: "Idioma",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "Clic central en el trackpad",
         middleClickEnable: "El clic con tres dedos actúa como clic central",
         middleClickEnableCaption: "Presionar el trackpad con tres dedos funciona como el clic de la rueda del ratón: abrir enlaces en una pestaña nueva, cerrar pestañas y todo lo demás que hace el botón central.",
-        middleClickDragConflict: "El arrastre con tres dedos de macOS está activado y usa este mismo gesto. Desactívalo en Ajustes del Sistema, en Accesibilidad, Control del puntero, Opciones del trackpad, y el clic central funcionará.",
+        middleClickDragConflict: "El arrastre con tres dedos de macOS está activado y usa tres dedos, así que haz clic con cuatro dedos para el clic central. Para usar tres, desactívalo en Ajustes del Sistema, en Accesibilidad, Control del puntero, Opciones del trackpad.",
+        middleClickNoTrackpad: "No se pueden leer los toques del trackpad. Conecta un trackpad compatible.",
         middleClickTapPicker: "Un toque ligero también hace clic",
         middleClickTapOff: "Desactivado",
         middleClickTapThreeFingers: "3 dedos",
@@ -396,6 +397,8 @@ extension Strings {
         homebrewNoPackages: "No se encontraron paquetes",
         homebrewDependencies: "Dependencias",
         homebrewGroupDependencies: "Agrupar dependencias",
+        homebrewOrphans: "Ya no se necesitan",
+        homebrewOrphansNote: "Se instalaron como dependencias, pero ningún paquete instalado las necesita ya.",
         homebrewNoSelection: "Selecciona un paquete instalado o busca uno nuevo.",
         homebrewDetailsTitle: "Detalles del paquete",
         homebrewInstall: "Instalar",
@@ -794,7 +797,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Batería de periféricos",
         peripheralBatteryNoDevices: "No se encontraron periféricos",
         monitorGraphsSection: "Gráficas",
-        monitorGraphsCaption: "Elige qué métricas muestran una gráfica a lo largo del tiempo.",
 
         updateBannerTitle: "Actualización disponible",
         updateBannerAction: "Actualizar",
@@ -1060,8 +1062,10 @@ extension Strings {
         shelfEdgeToggle: "Abrir cerca de un borde de la pantalla",
         shelfEdgeCaption: "Arrastra un archivo hacia el borde de la pantalla para que el estante asome. Suéltalo ahí, o retíralo y el estante se repliega.",
         focusFollowsMouseName: "El foco sigue al ratón",
-        focusFollowsMouseCaption: "Enfoca y trae al frente la ventana bajo el puntero tras una breve pausa.",
+        focusFollowsMouseCaption: "Enfoca la ventana bajo el puntero.",
         focusFollowsMouseDelay: "Retraso al pasar",
+        focusFollowsMouseRaise: "Traer la ventana al frente",
+        focusFollowsMouseWaitForStop: "Esperar a que el puntero se detenga",
         switcherMinimizedPlacementLabel: "Ventanas minimizadas",
         switcherTreatHiddenAppsLikeMinimized: "Tratar las apps ocultas como ventanas minimizadas",
         switcherMinimizedPlacementNormal: "Orden normal",
@@ -1085,6 +1089,8 @@ extension Strings {
         shelfClearOnClose: "Borrar al cerrar",
         shelfClearOnCloseCaption: "Vacía el estante solo al hacer clic en el botón de cierre. Ocultarlo automáticamente y contraerlo conservan los ítems.",
         shelfShortcutFinderSelection: "Añadir la selección del Finder con el atajo",
-        shelfShortcutFinderSelectionCaption: "Con el Finder al frente, el atajo abre el estante con los archivos seleccionados ya dentro. Sin selección, se abre como siempre."
+        shelfShortcutFinderSelectionCaption: "Con el Finder al frente, el atajo abre el estante con los archivos seleccionados ya dentro. Sin selección, se abre como siempre.",
+        spacesOrderName: "Mantener los Espacios en un orden fijo",
+        spacesOrderCaption: "Evita que macOS reorganice los Espacios según el uso más reciente, para que sigan en el orden que elegiste. Tu ajuste anterior vuelve al desactivar esta opción. El Dock puede reiniciarse una vez para aplicar el cambio."
     )
 }

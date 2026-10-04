@@ -139,7 +139,7 @@ extension Strings {
         advancedUninstallConfirmTitle: "Удалить Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint очистит разрешения, удалит настройки и переместится в Корзину, после чего закроется. Это нельзя отменить из приложения, но файл останется в Корзине, пока вы её не очистите.",
         advancedUninstallFailedTitle: "Удаление остановлено",
-        advancedUninstallFailedBody: "Vorssaint не смог вернуть изменённую системную настройку: режим сна, скорость вентиляторов или ускорение мыши. Ничего не удалено. Повторите попытку и разрешите запрос пароля, если он появится.",
+        advancedUninstallFailedBody: "Vorssaint не смог вернуть изменённую системную настройку: режим сна, скорость вентиляторов, ускорение мыши или порядок Spaces. Ничего не удалено. Повторите попытку и разрешите запрос пароля, если он появится.",
 
         launchAtLogin: "Запускать при входе",
         languageLabel: "Язык",
@@ -179,7 +179,8 @@ extension Strings {
         middleClickSection: "Средняя кнопка на трекпаде",
         middleClickEnable: "Щелчок тремя пальцами как средняя кнопка",
         middleClickEnableCaption: "Нажатие на трекпад тремя пальцами работает как щелчок колёсиком мыши: открытие ссылок в новой вкладке, закрытие вкладок и всё остальное, что умеет средняя кнопка.",
-        middleClickDragConflict: "Перетягивание тремя пальцами в macOS включено и использует этот же жест. Отключите его в Системных настройках в разделе Универсальный доступ, Управление указателем, Параметры трекпада, и щелчок средней кнопкой заработает.",
+        middleClickDragConflict: "Перетягивание тремя пальцами в macOS включено и занимает три пальца, поэтому для щелчка средней кнопкой нажимайте четырьмя пальцами. Чтобы использовать три, отключите его в Системных настройках в разделе Универсальный доступ, Управление указателем, Параметры трекпада.",
+        middleClickNoTrackpad: "Не удаётся считать касания трекпада. Подключите поддерживаемый трекпад.",
         middleClickTapPicker: "Лёгкое касание тоже кликает",
         middleClickTapOff: "Выключено",
         middleClickTapThreeFingers: "3 пальца",
@@ -397,6 +398,8 @@ extension Strings {
         homebrewNoPackages: "Пакеты не найдены",
         homebrewDependencies: "Зависимости",
         homebrewGroupDependencies: "Группировать зависимости",
+        homebrewOrphans: "Больше не нужны",
+        homebrewOrphansNote: "Установлены как зависимости, но ни одному установленному пакету они больше не нужны.",
         homebrewNoSelection: "Выберите установленный пакет или найдите новый.",
         homebrewDetailsTitle: "Детали пакета",
         homebrewInstall: "Установить",
@@ -795,7 +798,6 @@ extension Strings {
         monitorShowPeripheralBattery: "Батарея аксессуаров",
         peripheralBatteryNoDevices: "Устройства не найдены",
         monitorGraphsSection: "Графики",
-        monitorGraphsCaption: "Выберите, для каких метрик показывать график во времени.",
 
         updateBannerTitle: "Доступно обновление",
         updateBannerAction: "Обновить",
@@ -1061,8 +1063,10 @@ extension Strings {
         shelfEdgeToggle: "Открывать у края экрана",
         shelfEdgeCaption: "Перетащите файл к краю экрана, чтобы полка выглянула. Отпустите его там, или потяните обратно, и полка уберётся.",
         focusFollowsMouseName: "Фокус следует за мышью",
-        focusFollowsMouseCaption: "Фокусирует и поднимает окно под указателем после короткой паузы.",
+        focusFollowsMouseCaption: "Фокусирует окно под указателем.",
         focusFollowsMouseDelay: "Задержка наведения",
+        focusFollowsMouseRaise: "Поднимать окно на передний план",
+        focusFollowsMouseWaitForStop: "Ждать, пока указатель остановится",
         switcherMinimizedPlacementLabel: "Свёрнутые окна",
         switcherTreatHiddenAppsLikeMinimized: "Считать скрытые приложения свёрнутыми окнами",
         switcherMinimizedPlacementNormal: "Обычный порядок",
@@ -1086,6 +1090,8 @@ extension Strings {
         shelfClearOnClose: "Очищать при закрытии",
         shelfClearOnCloseCaption: "Очищает полку только при нажатии кнопки закрытия. Автоматическое скрытие и сворачивание сохраняют элементы.",
         shelfShortcutFinderSelection: "Добавлять выбранное в Finder по горячей клавише",
-        shelfShortcutFinderSelectionCaption: "Когда Finder на переднем плане, горячая клавиша открывает полку уже с выбранными файлами. Если ничего не выбрано, полка открывается как обычно."
+        shelfShortcutFinderSelectionCaption: "Когда Finder на переднем плане, горячая клавиша открывает полку уже с выбранными файлами. Если ничего не выбрано, полка открывается как обычно.",
+        spacesOrderName: "Фиксированный порядок Spaces",
+        spacesOrderCaption: "Не даёт macOS переставлять Spaces по недавнему использованию, чтобы они оставались в заданном порядке. Прежняя настройка вернётся после выключения функции. Для применения Dock может один раз перезапуститься."
     )
 }
