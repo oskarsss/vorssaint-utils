@@ -195,6 +195,25 @@ enum NotchGestureTests {
                      "the infinite carousel prefetches neighboring months without reading intervening years")
     }
 
+    // A run-loop call can return before its deadline, and loaded CI runners
+    // need longer to deliver AppKit animations and main-queue callbacks.
+    // Keep pumping until the observable result arrives, with a bounded timeout.
+    @discardableResult
+    private static func waitForCalendar(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while !condition() && ProcessInfo.processInfo.systemUptime < deadline {
+            _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        return condition()
+    }
+
+    private static func pumpCalendar(for duration: TimeInterval) {
+        let deadline = ProcessInfo.processInfo.systemUptime + duration
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+    }
+
     private static func calendarDocument(_ suite: TestSuite) {
         let initial = Date()
         for (component, count, radius) in [(Calendar.Component.day, 7, 14), (.month, 1, 4)] {
@@ -300,8 +319,8 @@ enum NotchGestureTests {
             }
             feed(0, phase: .began, y: 0.5)
             feed(scroll.cellWidth * 2.375, phase: .changed)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
             let expected = calendar.date(byAdding: component, value: 2, to: initial)!
+            waitForCalendar { browsed.map { calendar.isDate($0, equalTo: expected, toGranularity: component) } == true }
             suite.expect(browsed.map { calendar.isDate($0, equalTo: expected, toGranularity: component) } == true,
                          "live browsing reports the central date before finger lift and ignores touchdown axis noise")
             let offset = scroll.contentView.bounds.minX
@@ -312,7 +331,7 @@ enum NotchGestureTests {
                              && coordinator.renderedCellUpdates == rendered,
                              "feeding the live selected day into the agenda preserves fractional travel and cached day cells")
             }
-            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            pumpCalendar(for: 0.2)
             suite.expect(scroll.scrolling && settled == 0 && abs(scroll.contentView.bounds.minX - offset) < 0.001,
                          "holding fingers still never settles or snaps an active trackpad gesture")
             var travel: CGFloat = 2.375
@@ -330,7 +349,7 @@ enum NotchGestureTests {
             travel += 0.375
             feed(0, momentum: .ended)
             let finalOffset = scroll.contentView.bounds.minX
-            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            waitForCalendar { settled > 0 && !scroll.scrolling && !scroll.programmatic }
             let finalDate = calendar.date(byAdding: component, value: Int(travel.rounded()), to: initial)!
             suite.expect(settled > 0 && !scroll.scrolling
                          && calendar.isDate(coordinator.centeredDate, equalTo: finalDate, toGranularity: component),
@@ -355,7 +374,7 @@ enum NotchGestureTests {
                              "monthly momentum uses the same gentle response as finger travel")
                 feed(0, momentum: .ended)
                 let released = scroll.contentView.bounds.minX
-                RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+                pumpCalendar(for: 0.25)
                 suite.expect(abs(scroll.contentView.bounds.minX - released) < 0.001 && !scroll.programmatic,
                              "a gentle monthly gesture stays where momentum ends without locking to a month")
             }
@@ -387,21 +406,21 @@ enum NotchGestureTests {
         coordinator.update(model(month))
         selected = calendar.date(byAdding: .day, value: 14, to: month)!
         coordinator.update(model(selected))
-        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
-        suite.expect(calendar.component(.day, from: selected) == 15 && settlements == 0 && browsed == 0,
+        waitForCalendar { !scroll.programmatic }
+        suite.expect(calendar.component(.day, from: selected) == 15 && settlements == 0 && browsed == 0 && !scroll.programmatic,
                      "animated month navigation preserves the explicitly chosen day and agenda without a gesture settlement")
         let next = calendar.date(byAdding: .month, value: 1, to: selected)!
         selected = next
         coordinator.update(model(next))
-        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
-        suite.expect(selected == next && settlements == 0 && browsed == 0
+        waitForCalendar { !scroll.programmatic }
+        suite.expect(selected == next && settlements == 0 && browsed == 0 && !scroll.programmatic
                      && calendar.isDate(coordinator.centeredDate, equalTo: next, toGranularity: .month),
                      "an animated move to another month preserves explicit selection without sending a live browsing callback")
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
                             wheel1: 0, wheel2: -14, wheel3: 0)!
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.55))
+        waitForCalendar { settlements > 0 && !scroll.scrolling && !scroll.programmatic }
         suite.expect(settlements == 1 && calendar.component(.day, from: selected) == 1,
                      "near-month alignment still settles a real gesture and selects the displayed month")
         coordinator.stop()
@@ -439,14 +458,14 @@ enum NotchGestureTests {
                      "returning to the coming-week agenda clears a highlight even when the input date is unchanged")
         let later = calendar.date(byAdding: .day, value: 2, to: today)!
         coordinator.update(model(later))
-        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
-        suite.expect(selected == nil && callbacks == 0 && coordinator.highlightedDates.isEmpty,
+        waitForCalendar { !scroll.programmatic }
+        suite.expect(selected == nil && callbacks == 0 && coordinator.highlightedDates.isEmpty && !scroll.programmatic,
                      "animated week recentering preserves the unfiltered agenda and does not mark a day selected")
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
                             wheel1: 0, wheel2: -60, wheel3: 0)!
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+        waitForCalendar { selected == coordinator.centeredDate }
         suite.expect(selected == coordinator.centeredDate && coordinator.highlightedDates == [coordinator.centeredDate],
                      "a real week gesture leaves unfiltered mode and updates the centered highlight and selected agenda live")
         coordinator.stop()
@@ -542,10 +561,10 @@ enum NotchGestureTests {
             scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
             suite.expect(abs(scroll.contentView.bounds.minX - 4 * scroll.cellWidth - CGFloat(travel)) < 0.001,
                          "month alignment assistance never resists movement during a gesture")
-            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            waitForCalendar { !scroll.scrolling && !scroll.programmatic }
             let expected = 4 * scroll.cellWidth + (abs(travel) < 56 ? 0 : CGFloat(travel))
             suite.expect(abs(scroll.contentView.bounds.minX - expected) < 0.001 && !scroll.programmatic,
-                         "months gently align only when released near a boundary, in either direction")
+                         "months gently align only when released near a boundary, in either direction (travel=\(travel), offset=\(scroll.contentView.bounds.minX), expected=\(expected), scrolling=\(scroll.scrolling), animating=\(scroll.programmatic))")
         }
         coordinator.stop()
         scroll.stop()
@@ -609,23 +628,23 @@ enum NotchGestureTests {
         feed(200, phase: 0, momentum: 1, timestamp: 1.1)
         suite.expect(abs(scroll.contentView.bounds.minX - released) < 0.001 && scroll.isCoasting,
                      "system momentum cannot double the carousel's custom release movement")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        waitForCalendar { scroll.contentView.bounds.minX > released + 50 }
         let coasted = scroll.contentView.bounds.minX
         suite.expect(coasted > released + 50 && scroll.isCoasting && settled == 0,
                      "fast monthly scrolling continues smoothly after the final input event")
         feed(0, phase: 1, timestamp: 2)
         let interrupted = scroll.contentView.bounds.minX
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        pumpCalendar(for: 0.1)
         suite.expect(!scroll.isCoasting && abs(scroll.contentView.bounds.minX - interrupted) < 0.001,
                      "touching the carousel stops the coast immediately without queued movement")
         feed(0, phase: 4, timestamp: 2.2)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        waitForCalendar { !scroll.scrolling && settled == 1 }
         suite.expect(!scroll.scrolling && settled == 1,
                      "a stationary release stays still and settles exactly once")
         feed(0, phase: 1, timestamp: 3)
         for index in 1...5 { feed(16, phase: 2, timestamp: 3 + Double(index) / 60) }
         feed(0, phase: 4, timestamp: 3 + 5.0 / 60)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.8))
+        waitForCalendar { !scroll.isCoasting && !scroll.scrolling && settled == 2 }
         suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 2,
                      "the exponential coast reaches rest and settles without a hard cutoff")
         coordinator.stop()

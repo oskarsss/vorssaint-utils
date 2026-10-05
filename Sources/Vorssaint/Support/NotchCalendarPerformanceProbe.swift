@@ -69,7 +69,8 @@ enum NotchCalendarPerformanceProbe {
             guard !movement.isEmpty, movement.first! > movement.last!, movement.allSatisfy({ $0 >= 0 }),
                   previous - released > 250 else { fatalError("Production month coast failed to decelerate") }
             print(String(format: "calendar-coast: frames=%d distance=%.2fpt firstFrame=%.2fpt lastFrame=%.2fpt maxLayout=%.2fms",
-                         movement.count, previous - released, movement.first!, movement.last!, samples.max()!))
+                         locale: Locale(identifier: "en_US_POSIX"), movement.count, previous - released,
+                         movement.first!, movement.last!, samples.max()!))
             scroll.stop()
             exit(0)
         }
@@ -118,7 +119,8 @@ enum NotchCalendarPerformanceProbe {
         }
         let sorted = samples.sorted()
         print(String(format: "calendar-scroll: initial=%.2fms median=%.2fms p95=%.2fms max=%.2fms framesOver16ms=%d",
-                     initialMS, sorted[sorted.count / 2], sorted[Int(Double(sorted.count - 1) * 0.95)],
+                     locale: Locale(identifier: "en_US_POSIX"), initialMS, sorted[sorted.count / 2],
+                     sorted[Int(Double(sorted.count - 1) * 0.95)],
                      sorted.last!, samples.filter { $0 > 16.67 }.count))
         scroll.stop()
         exit(0)
