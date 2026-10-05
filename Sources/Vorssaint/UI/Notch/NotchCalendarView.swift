@@ -90,13 +90,14 @@ struct NotchCalendarView: View {
 
     private func monthView(now: Date) -> some View {
         NotchCalendarMonthView(month: focus, selectedDay: selectedDay, now: now,
+                               height: size.height - 12,
                                events: calendar.events, text: text, select: select, move: moveMonth) {
             today(now: now)
         } open: {
             openCalendar()
         } browse: { prefetch($0) } settled: { browse($0) }
         .padding(.bottom, 12)
-        .frame(maxHeight: .infinity)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func weekStrip(now: Date) -> some View {

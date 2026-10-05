@@ -7,6 +7,7 @@ struct NotchCalendarMonthView: View {
     let month: Date
     let selectedDay: Date?
     let now: Date
+    let height: CGFloat
     let events: [NotchCalendarEvent]
     let text: NotchCalendarStrings
     let select: (Date) -> Void
@@ -16,6 +17,11 @@ struct NotchCalendarMonthView: View {
     var browse: (Date) -> Void = { _ in }
     var settled: (Date) -> Void = { _ in }
     @State private var displayedMonth: Date?
+
+    // Reserve the fixed header, footer and their two gaps before sizing all
+    // six date rows. The wide page starts at 300 points, including its padding.
+    private var gridHeight: CGFloat { min(222, max(0, height - 42 - 28 - 24)) }
+    private var rowHeight: CGFloat { max(0, (gridHeight - 18 - 24) / 6) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,10 +36,12 @@ struct NotchCalendarMonthView: View {
                 NotchIconButton(symbol: "chevron.left", title: text.previousMonth) { move(-1) }
                 NotchIconButton(symbol: "chevron.right", title: text.nextMonth) { move(1) }
             }
+            .frame(height: 42)
             NotchCalendarMonthDates(month: month, selectedDay: selectedDay, now: now, events: events, text: text,
-                                    rowHeight: 30, weekdayHeight: 18, spacing: 4, circle: 24, dotGap: 2,
+                                    rowHeight: rowHeight, weekdayHeight: 18, spacing: 4,
+                                    circle: min(24, max(0, rowHeight - 5)), dotGap: 2,
                                     select: select, browse: { date in displayedMonth = date; browse(date) }, settled: settled)
-                .frame(height: 222)
+                .frame(height: gridHeight)
             HStack {
                 Button(action: today) {
                     Text(text.today)
@@ -45,6 +53,7 @@ struct NotchCalendarMonthView: View {
                 Spacer(minLength: 4)
                 NotchIconButton(symbol: "arrow.up.forward.app", title: text.openCalendar, action: open)
             }
+            .frame(height: 28)
         }
         .foregroundStyle(.white)
         .onChange(of: month) { _, date in displayedMonth = date }

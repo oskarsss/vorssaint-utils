@@ -166,6 +166,10 @@ enum NotchGestureTests {
     private static func calendarPaging(_ suite: TestSuite) {
         calendarDocument(suite)
         calendarLiveScrolling(suite)
+        calendarExplicitSelection(suite)
+        calendarWeekSelection(suite)
+        calendarReducedMotionSelection(suite)
+        calendarWideMonthLayout(suite)
         calendarMonthAlignment(suite)
         calendarMomentum(suite)
         monthDrawing(suite)
@@ -357,6 +361,163 @@ enum NotchGestureTests {
             }
             coordinator.stop()
             scroll.stop()
+        }
+    }
+
+    private static func calendarExplicitSelection(_ suite: TestSuite) {
+        let calendar = Calendar.current
+        let month = calendar.date(from: DateComponents(year: 2026, month: 10, day: 1))!
+        var selected = month
+        var browsed = 0
+        var settlements = 0
+        func model(_ date: Date) -> NotchCalendarCarousel<Text> {
+            NotchCalendarCarousel(date: date, component: .month, visibleCount: 1,
+                                  browse: { _ in browsed += 1 }, settled: { selected = $0; settlements += 1 },
+                                  monthAlignmentTolerance: 0.14,
+                                  contentState: NotchCalendarCarouselContentState(events: [], selectedDay: date, today: month)) {
+                Text($0, format: .dateTime.day())
+            }
+        }
+        let coordinator = model(month).makeCoordinator()
+        let scroll = CalendarCarouselScrollView(frame: CGRect(x: 0, y: 0, width: 196, height: 194))
+        let window = NSWindow(contentRect: scroll.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = scroll
+        coordinator.attach(scroll)
+        scroll.layoutSubtreeIfNeeded()
+        coordinator.update(model(month))
+        selected = calendar.date(byAdding: .day, value: 14, to: month)!
+        coordinator.update(model(selected))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        suite.expect(calendar.component(.day, from: selected) == 15 && settlements == 0 && browsed == 0,
+                     "animated month navigation preserves the explicitly chosen day and agenda without a gesture settlement")
+        let next = calendar.date(byAdding: .month, value: 1, to: selected)!
+        selected = next
+        coordinator.update(model(next))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        suite.expect(selected == next && settlements == 0 && browsed == 0
+                     && calendar.isDate(coordinator.centeredDate, equalTo: next, toGranularity: .month),
+                     "an animated move to another month preserves explicit selection without sending a live browsing callback")
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
+                            wheel1: 0, wheel2: -14, wheel3: 0)!
+        event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.55))
+        suite.expect(settlements == 1 && calendar.component(.day, from: selected) == 1,
+                     "near-month alignment still settles a real gesture and selects the displayed month")
+        coordinator.stop()
+        scroll.stop()
+    }
+
+    private static func calendarWeekSelection(_ suite: TestSuite) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var selected: Date?
+        var callbacks = 0
+        func model(_ date: Date) -> NotchCalendarCarousel<Text> {
+            NotchCalendarCarousel(date: date, component: .day, visibleCount: 7,
+                                  browse: { selected = $0; callbacks += 1 }, settled: { selected = $0; callbacks += 1 },
+                                  contentState: NotchCalendarCarouselContentState(events: [], selectedDay: selected, today: today)) {
+                Text($0, format: .dateTime.day())
+            }
+        }
+        let coordinator = model(today).makeCoordinator()
+        let scroll = CalendarCarouselScrollView(frame: CGRect(x: 0, y: 0, width: 350, height: 52))
+        let window = NSWindow(contentRect: scroll.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = scroll
+        coordinator.attach(scroll)
+        scroll.layoutSubtreeIfNeeded()
+        coordinator.update(model(today))
+        suite.expect(coordinator.highlightedDates.isEmpty && selected == nil,
+                     "entering the coming-week agenda leaves every tile unselected so today's first click can select today")
+        selected = today
+        coordinator.update(model(today))
+        suite.expect(coordinator.highlightedDates == [today],
+                     "explicitly selecting today highlights it without moving the week")
+        selected = nil
+        coordinator.update(model(today))
+        suite.expect(coordinator.highlightedDates.isEmpty,
+                     "returning to the coming-week agenda clears a highlight even when the input date is unchanged")
+        let later = calendar.date(byAdding: .day, value: 2, to: today)!
+        coordinator.update(model(later))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        suite.expect(selected == nil && callbacks == 0 && coordinator.highlightedDates.isEmpty,
+                     "animated week recentering preserves the unfiltered agenda and does not mark a day selected")
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
+                            wheel1: 0, wheel2: -60, wheel3: 0)!
+        event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+        suite.expect(selected == coordinator.centeredDate && coordinator.highlightedDates == [coordinator.centeredDate],
+                     "a real week gesture leaves unfiltered mode and updates the centered highlight and selected agenda live")
+        coordinator.stop()
+        scroll.stop()
+    }
+
+    private static func calendarReducedMotionSelection(_ suite: TestSuite) {
+        let calendar = Calendar.current
+        let initial = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        for component in [Calendar.Component.day, .month] {
+            var selected: Date?
+            var callbacks = 0
+            func model(_ date: Date) -> NotchCalendarCarousel<Text> {
+                NotchCalendarCarousel(date: date, component: component, visibleCount: component == .day ? 7 : 1,
+                                      browse: { selected = $0; callbacks += 1 }, settled: { selected = $0; callbacks += 1 },
+                                      contentState: NotchCalendarCarouselContentState(events: [], selectedDay: selected,
+                                                                                    today: initial)) {
+                    Text($0, format: .dateTime.day())
+                }
+            }
+            let coordinator = model(initial).makeCoordinator()
+            let scroll = CalendarCarouselScrollView(frame: CGRect(x: 0, y: 0, width: 350, height: 210))
+            let window = NSWindow(contentRect: scroll.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+            window.contentView = scroll
+            coordinator.attach(scroll)
+            scroll.layoutSubtreeIfNeeded()
+            coordinator.update(model(initial), animated: false)
+            let requested = calendar.date(byAdding: component, value: 1, to: initial)!
+            coordinator.update(model(requested), animated: false)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+            suite.expect(selected == nil && callbacks == 0,
+                         "Reduce Motion navigation preserves the unfiltered agenda without a browsing callback in \(component) view")
+            selected = initial
+            coordinator.update(model(initial), animated: false)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+            suite.expect(selected == initial && callbacks == 0,
+                         "Reduce Motion navigation also preserves an explicitly selected date in \(component) view")
+            coordinator.stop()
+            scroll.stop()
+        }
+    }
+
+    private static func calendarWideMonthLayout(_ suite: TestSuite) {
+        let month = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1))!
+        for height: CGFloat in [300, 316, 334, 400] {
+            let view = NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
+                                             height: height - 12, events: [], text: FeatureStrings.notchCalendar(.enUS),
+                                             select: { _ in }, move: { _ in }, today: {}, open: {})
+                .padding(.bottom, 12).frame(width: 196).fixedSize(horizontal: false, vertical: true)
+            let host = NSHostingView(rootView: view)
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 196, height: height),
+                                  styleMask: [.borderless], backing: .buffered, defer: true)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+            host.layoutSubtreeIfNeeded()
+            suite.expect(host.fittingSize.height <= height + 0.01,
+                         "the wide month's header, six date rows, footer and padding fit a \(height)-point page")
+            func findCanvas(_ view: NSView) -> CalendarMonthCanvasView? {
+                if let canvas = view as? CalendarMonthCanvasView,
+                   host.bounds.intersects(host.convert(canvas.bounds, from: canvas)) { return canvas }
+                return view.subviews.lazy.compactMap { findCanvas($0) }.first
+            }
+            let canvas = findCanvas(host)
+            let children = canvas?.accessibilityChildren() as? [NSAccessibilityElement] ?? []
+            let bottom = children.last?.accessibilityFrame() ?? .zero
+            var ancestor = canvas?.superview
+            while ancestor != nil && !(ancestor is NSClipView) { ancestor = ancestor?.superview }
+            let viewport = ancestor.map { window.convertToScreen($0.convert($0.bounds, to: nil)) } ?? .zero
+            suite.expect(children.count == 42 && viewport.contains(bottom) && bottom.height >= 16,
+                         "the sixth month row remains fully inside the native date viewport and tappable at \(height) points")
         }
     }
 

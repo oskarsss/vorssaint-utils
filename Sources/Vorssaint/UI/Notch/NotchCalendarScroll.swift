@@ -46,7 +46,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
         return scroll
     }
     func updateNSView(_ scroll: CalendarCarouselScrollView, context: Context) {
-        context.coordinator.update(self)
+        context.coordinator.update(self, animated: !reduceMotion)
     }
     static func dismantleNSView(_ scroll: CalendarCarouselScrollView, coordinator: Coordinator) {
         coordinator.stop()
@@ -108,7 +108,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             scroll.coastsMonths = parent.coastsMonths
             scroll.reduceMotion = parent.reduceMotion
         }
-        func update(_ parent: NotchCalendarCarousel) {
+        func update(_ parent: NotchCalendarCarousel, animated: Bool = true) {
             self.parent = parent
             if let scroll { configure(scroll) }
             layout()
@@ -127,7 +127,11 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
                     .value(for: parent.component) ?? 0
                 let centeredDistance = distance - (parent.component == .day ? parent.visibleCount / 2 : 0)
                 if abs(centeredDistance) <= radius / 2 {
-                    scroll.setPosition(CGFloat(radius + centeredDistance) * pitch, animated: !parent.reduceMotion)
+                    // Without animation, NSClipView reports the bounds change
+                    // synchronously. That move is still explicit navigation.
+                    updating = true
+                    scroll.setPosition(CGFloat(radius + centeredDistance) * pitch, animated: animated)
+                    updating = false
                 } else {
                     updating = true
                     anchor = parent.component == .month
@@ -204,15 +208,17 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             }
             renderedViewport = viewport
             if parent.component == .day {
-                updateSelection(selectedDay ?? (scroll.scrolling ? centeredDate : parent.contentState?.selectedDay ?? parent.date))
+                // An unfiltered coming-week agenda has no selected tile.
+                // Only active browsing substitutes the date under the center.
+                updateSelection(selectedDay ?? (scroll.scrolling ? centeredDate : parent.contentState?.selectedDay))
             }
         }
         var highlightedDates: [Date] { selections.filter { $0.value.selected }.map(\.key) }
-        private func updateSelection(_ selected: Date) {
-            let day = Calendar.current.startOfDay(for: selected)
-            guard day != highlightedDay || selections[day]?.selected == false else { return }
+        private func updateSelection(_ selected: Date?) {
+            let day = selected.map { Calendar.current.startOfDay(for: $0) }
+            guard day != highlightedDay || day.map({ selections[$0]?.selected == false }) == true else { return }
             if let highlightedDay { selections[highlightedDay]?.setSelected(false) }
-            selections[day]?.setSelected(true)
+            if let day { selections[day]?.setSelected(true) }
             highlightedDay = day
         }
         var centeredDate: Date {
@@ -413,8 +419,7 @@ final class CalendarCarouselScrollView: NSScrollView {
                 if abs(position - target) > 0.0001 {
                     setPosition(target * cellWidth, animated: !reduceMotion,
                                 duration: snapsDays ? 0.24 : 0.32,
-                                timing: snapsDays ? .easeOut : .easeInEaseOut)
-                    if reduceMotion { didSettle?() }
+                                timing: snapsDays ? .easeOut : .easeInEaseOut, settlesGesture: true)
                     return
                 }
             }
@@ -433,7 +438,7 @@ final class CalendarCarouselScrollView: NSScrollView {
         momentum = NotchCalendarMomentum()
     }
     func setPosition(_ offset: CGFloat, animated: Bool, duration: TimeInterval = 0.24,
-                     timing: CAMediaTimingFunctionName = .easeOut) {
+                     timing: CAMediaTimingFunctionName = .easeOut, settlesGesture: Bool = false) {
         let point = NSPoint(x: offset, y: 0)
         if animated {
             cancelMomentum()
@@ -448,12 +453,14 @@ final class CalendarCarouselScrollView: NSScrollView {
                 guard let self, self.animationGeneration == generation else { return }
                 self.programmatic = false
                 self.reflectScrolledClipView(self.contentView)
-                NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: self.contentView)
-                self.didSettle?()
+                // Explicit navigation already supplied its selection. Only
+                // gesture alignment chooses a date when its animation ends.
+                if settlesGesture { self.didSettle?() }
             }
         } else {
             contentView.scroll(to: point)
             reflectScrolledClipView(contentView)
+            if settlesGesture { didSettle?() }
         }
     }
     func stop() { cancelMomentum(); settle = nil; viewportChanged = nil; didSettle = nil; applyScrollDelta = nil }

@@ -296,6 +296,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Notch/NotchCalendarScrollSupport.swift
         Sources/Vorssaint/UI/Notch/NotchCalendarScroll.swift
         Sources/Vorssaint/UI/Notch/NotchCalendarMonthCanvas.swift
+        Sources/Vorssaint/UI/Notch/NotchCalendarMonthView.swift
         Sources/Vorssaint/Services/Notch/NotchSectionPaging.swift
         Sources/Vorssaint/Services/Notch/NotchSliderEditing.swift
         Sources/Vorssaint/Services/Notch/NotchNotificationSupport.swift
