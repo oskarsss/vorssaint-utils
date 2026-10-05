@@ -345,7 +345,6 @@ final class CalendarCarouselScrollView: NSScrollView {
     private var animationGeneration = 0
     private var momentum = NotchCalendarMomentum()
     private var ownsMomentum = false
-    private var moved = false
     private var alignsUnphasedInput = false
     private var coast: Timer?
     private var coastVelocity = 0.0
@@ -375,7 +374,7 @@ final class CalendarCarouselScrollView: NSScrollView {
         // The monthly release has one momentum source. Adding AppKit's
         // momentum deltas to the custom coast would accelerate it twice.
         if ownsMomentum && !event.momentumPhase.isEmpty { return }
-        if event.phase.contains(.began) || (!scrolling && event.momentumPhase.isEmpty) { moved = false }
+        if event.phase.contains(.began) { scrolling = false }
         cancelCoast()
         settle?.cancel()
         animationGeneration += 1
@@ -385,7 +384,6 @@ final class CalendarCarouselScrollView: NSScrollView {
                 contentView.animator().setBoundsOrigin(contentView.bounds.origin)
             }
         }
-        scrolling = true
         programmatic = false
         let unphased = event.phase.isEmpty && event.momentumPhase.isEmpty
         alignsUnphasedInput = unphased
@@ -418,7 +416,7 @@ final class CalendarCarouselScrollView: NSScrollView {
         // Only precise input needs the gentler point-based monthly response.
         delta *= event.hasPreciseScrollingDeltas ? scrollSensitivity : cellWidth
         if ownsMomentum { momentum.record(delta: Double(-delta), timestamp: event.timestamp) }
-        if delta.isFinite && delta != 0 { moved = true; move(by: -delta) }
+        if delta.isFinite && delta != 0 { scrolling = true; move(by: -delta) }
         let cancelled = event.phase.contains(.cancelled)
         // A finger pause is still an active gesture. Only unphased wheels use
         // inactivity; trackpads settle after lift/momentum end, never mid-swipe.
@@ -456,9 +454,8 @@ final class CalendarCarouselScrollView: NSScrollView {
         }
     }
     private func finishScrolling() {
+        guard scrolling else { return }
         scrolling = false
-        guard moved else { return }
-        moved = false
         if cellWidth > 0 {
             let position = contentView.bounds.minX / cellWidth
             let target = position.rounded()

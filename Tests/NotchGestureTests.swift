@@ -280,8 +280,13 @@ enum NotchGestureTests {
         }
 
         func finish() {
+            let wasScrolling = scroll.scrolling
             feed(0, phase: 4)
-            NotchGestureTests.waitForCalendar { !self.scroll.scrolling && !self.scroll.programmatic }
+            if wasScrolling {
+                NotchGestureTests.waitForCalendar { !self.scroll.scrolling && !self.scroll.programmatic }
+            } else {
+                NotchGestureTests.pumpCalendar(for: 0.2)
+            }
         }
 
         func stop() { coordinator.stop(); scroll.stop() }
@@ -306,8 +311,9 @@ enum NotchGestureTests {
                     fixture.feed(0, phase: 1)
                     fixture.feed(travel, phase: 2)
                     pumpCalendar(for: 0.04)
+                    let idleTouch = travel >= 3 || !fixture.scroll.scrolling
                     fixture.finish()
-                    suite.expect(fixture.browsed.isEmpty && fixture.settlements.isEmpty
+                    suite.expect(idleTouch && fixture.browsed.isEmpty && fixture.settlements.isEmpty
                                  && fixture.selected == (selected ? fixture.initial : nil),
                                  "touch/lift, axis noise and a same-page swipe preserve selection and the unfiltered agenda (\(component), \(travel))")
                     if component == .day {
