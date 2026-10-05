@@ -51,7 +51,7 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 
 ### Changed
 - Monitor settings put each reading's display options beside its compact label, with separate groups for the menu bar, panel and shared settings. History graphs now show their scale.
-- The Settings sidebar groups tools like the Features page and removes the duplicate Clipboard row.
+- The Settings sidebar groups tools like the Features page and removes the duplicate Clipboard row. The volume mixer uses the same speaker icon in Features, the menu bar panel and Dynamic Island.
 - With Group dependencies on, Homebrew lists dependencies that no installed package needs in a separate No longer needed group. Those with pending updates stay beside the other updates.
 - Deleting a Radial Menu profile now asks for confirmation and names the profile and what will be removed.
 - Trackpad middle click is named explicitly, and cleanup, microphone, quit-protection and Command Bar privacy messages more accurately describe what happens.
@@ -77,7 +77,7 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 - Searching a feature in the Command Bar, such as Keep awake or Shelf, lists its switch or main command first, then its presets, then its Settings page, instead of the Settings page first and the switch last.
 - Dynamic Island keeps the current song on screen while a web player loads the next one, instead of briefly showing another player's paused song. With the New track indicator on, a new song appears in the indicator before the compact island, even when it takes a while to load.
 - With Automatically include videos and other apps on, Dynamic Island switches to a browser that starts playing even while macOS still points to a paused music app.
-- Lyrics are also found for songs whose player reports no album.
+- Lyrics are also found for songs whose player reports no album. The timing adjustment buttons are easier to click.
 - A Dynamic Island opened by hover now closes when the pointer leaves quickly past one of its floating buttons, such as the music button below it, instead of staying open until the pointer comes back.
 - The closed Dynamic Island no longer stays enlarged after the pointer passes over it quickly, such as on the way to a display above it.
 - When Dynamic Island opens on a click, a click at the top edge of the screen while the island grows under the pointer now opens it instead of doing nothing.
@@ -97,7 +97,7 @@ Dynamic Island adds a companion, an integrated Command Bar and Watch, while AI A
 - App Switcher stays responsive while preparing window previews and keeps showing apps that are too busy to describe their windows in time.
 
 ### Contributors
-Thanks to @69grcv8vfm-sys, @adhvikrayaprolu, @adnn-alc, @AlirezaBs, @ashwanthbalakrishnan5, @asim-sde, @Bald-M, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @bmrtfm, @claude, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @georgebnov, @gorillasuti, @hartra344, @IanHollow, @ilim-cell, @iltonandrew, @itsalexcoman, @JamesOBrien2, @LeChaEgg, @mikeknight85, @nickciava98, @niukanen1, @nzc0der, @oecer, @ozanuslan, @PathGao, @Qarru, @renan-tiberio, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @schnyders, @shlok1806, @sim-pez, @theafox, @thitiwats, @trac3r00, @yuzu-octopus and @ywu73. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
+Thanks to @69grcv8vfm-sys, @adhvikrayaprolu, @adnn-alc, @AlirezaBs, @ashwanthbalakrishnan5, @asim-sde, @Bald-M, @bebricoOOOOOOf, @benjaminbelloeil, @benjaminbrtrd, @bmrtfm, @claude, @dc0dr, @dreammissnot, @emreertunc, @EugeneCarldotme, @Ffinnis, @frieddeli, @Frozen0wl, @georgebnov, @gorillasuti, @hartra344, @IanHollow, @ilim-cell, @iltonandrew, @itsalexcoman, @JamesOBrien2, @LeChaEgg, @mikeknight85, @nickciava98, @niukanen1, @nzc0der, @oecer, @oskarsss, @ozanuslan, @PathGao, @Qarru, @renan-tiberio, @Retr0MrWave, @ruvelro, @sagnikonly, @samanyudas, @sarat03, @schnyders, @shlok1806, @sim-pez, @theafox, @thitiwats, @trac3r00, @yuzu-octopus and @ywu73. Feedback: Barbel Design, Emanuele Frasca, Pinea and the/master.
 
 ## [3.4.1-beta.1] - 2026-09-29
 
