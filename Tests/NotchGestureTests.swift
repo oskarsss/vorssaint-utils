@@ -172,6 +172,9 @@ enum NotchGestureTests {
         calendarWideMonthLayout(suite)
         calendarMonthAlignment(suite)
         calendarMomentum(suite)
+        calendarQuietGestures(suite)
+        calendarWheelNavigation(suite)
+        calendarVisibleTiles(suite)
         monthDrawing(suite)
         calendarColors(suite)
         for position in [-5000.375, -17.8, -7.1, -0.25, 0, 0.25, 7.1, 17.8, 5000.375] {
@@ -214,6 +217,180 @@ enum NotchGestureTests {
         }
     }
 
+    private final class CalendarInteractionFixture {
+        let initial = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let component: Calendar.Component
+        let scroll: CalendarCarouselScrollView
+        let window: NSWindow
+        var coordinator: NotchCalendarCarousel<Text>.Coordinator!
+        var focus: Date
+        var displayed: Date
+        var selected: Date?
+        var browsed: [Date] = []
+        var settlements: [Date] = []
+        var echoesBrowse = true
+
+        init(component: Calendar.Component, width: CGFloat, selected: Bool = false) {
+            self.component = component
+            focus = initial
+            displayed = initial
+            self.selected = selected ? initial : nil
+            scroll = CalendarCarouselScrollView(frame: CGRect(x: 0, y: 0, width: width, height: 184))
+            window = NSWindow(contentRect: scroll.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+            window.contentView = scroll
+            coordinator = model().makeCoordinator()
+            coordinator.attach(scroll)
+            scroll.layoutSubtreeIfNeeded()
+            coordinator.update(model())
+        }
+
+        private func model() -> NotchCalendarCarousel<Text> {
+            NotchCalendarCarousel(date: focus, component: component, visibleCount: component == .day ? 7 : 1,
+                                  browse: { [weak self] date in
+                guard let self else { return }
+                browsed.append(date)
+                displayed = date
+                if component == .day {
+                    focus = date
+                    selected = date
+                    if echoesBrowse { coordinator.update(model()) }
+                }
+            }, settled: { [weak self] date in
+                guard let self else { return }
+                settlements.append(date)
+                focus = date
+                selected = date
+                coordinator.update(model())
+            }, scrollSensitivity: component == .month ? 0.75 : 1, monthAlignmentTolerance: 0.14,
+                                  contentState: NotchCalendarCarouselContentState(events: [], selectedDay: selected, today: initial)) {
+                Text($0, format: .dateTime.day())
+            }
+        }
+
+        func feed(_ amount: CGFloat, phase: Int64 = 0, precise: Bool = true, shift: Bool = false) {
+            let event = CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 2,
+                                wheel1: precise ? 0 : -Int32(amount), wheel2: 0, wheel3: 0)!
+            event.setIntegerValueField(.scrollWheelEventIsContinuous, value: precise ? 1 : 0)
+            if precise {
+                event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: Double(-amount / scroll.scrollSensitivity))
+            }
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+            if shift { event.flags = .maskShift }
+            scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
+        }
+
+        func finish() {
+            feed(0, phase: 4)
+            NotchGestureTests.waitForCalendar { !self.scroll.scrolling && !self.scroll.programmatic }
+        }
+
+        func stop() { coordinator.stop(); scroll.stop() }
+    }
+
+    private static func calendarQuietGestures(_ suite: TestSuite) {
+        let delayed = CalendarInteractionFixture(component: .day, width: 350)
+        delayed.echoesBrowse = false
+        delayed.feed(0, phase: 1)
+        delayed.feed(delayed.scroll.cellWidth, phase: 2)
+        delayed.finish()
+        suite.expect(delayed.browsed.count == 1 && delayed.settlements.isEmpty
+                     && delayed.coordinator.highlightedDates == [delayed.focus],
+                     "live week selection is committed once even before SwiftUI returns its updated model")
+        delayed.stop()
+        for component in [Calendar.Component.day, .month] {
+            for selected in [false, true] {
+                let fixture = CalendarInteractionFixture(component: component, width: component == .day ? 350 : 196,
+                                                          selected: selected)
+                defer { fixture.stop() }
+                for travel: CGFloat in [0, 2, 10] {
+                    fixture.feed(0, phase: 1)
+                    fixture.feed(travel, phase: 2)
+                    pumpCalendar(for: 0.04)
+                    fixture.finish()
+                    suite.expect(fixture.browsed.isEmpty && fixture.settlements.isEmpty
+                                 && fixture.selected == (selected ? fixture.initial : nil),
+                                 "touch/lift, axis noise and a same-page swipe preserve selection and the unfiltered agenda (\(component), \(travel))")
+                    if component == .day {
+                        suite.expect(fixture.coordinator.highlightedDates == (selected ? [fixture.initial] : []),
+                                     "a same-day gesture preserves the existing highlight, including no selection")
+                    }
+                }
+                // Returning before the main queue reports the neighbor must
+                // invalidate that pending report, not leave it queued.
+                fixture.feed(0, phase: 1)
+                fixture.feed(fixture.scroll.cellWidth, phase: 2)
+                fixture.feed(-fixture.scroll.cellWidth, phase: 2)
+                fixture.finish()
+                suite.expect(fixture.browsed.isEmpty && fixture.settlements.isEmpty,
+                             "a quick out-and-back gesture cancels its queued neighboring date")
+
+                fixture.feed(0, phase: 1)
+                fixture.feed(fixture.scroll.cellWidth, phase: 2)
+                waitForCalendar { fixture.browsed.count == 1 }
+                fixture.feed(-fixture.scroll.cellWidth, phase: 2)
+                fixture.finish()
+                suite.expect(fixture.browsed.count == 2
+                             && Calendar.current.isDate(fixture.displayed, equalTo: fixture.initial, toGranularity: component)
+                             && Calendar.current.isDate(fixture.focus, equalTo: fixture.initial, toGranularity: component),
+                             "returning from an already displayed neighbor restores the month title or live week agenda")
+                suite.expect(fixture.settlements.isEmpty && (component == .day
+                             ? fixture.selected == fixture.initial : fixture.selected == (selected ? fixture.initial : nil)),
+                             "returning to the shown page needs no duplicate settlement or month selection reset")
+            }
+        }
+    }
+
+    private static func calendarWheelNavigation(_ suite: TestSuite) {
+        for (component, width) in [(Calendar.Component.day, CGFloat(280)), (.day, 490), (.month, 196), (.month, 540)] {
+            let fixture = CalendarInteractionFixture(component: component, width: width)
+            defer { fixture.stop() }
+            var offset = 0
+            for (notches, shift) in [(1, false), (-1, true), (3, false), (-2, true)] {
+                fixture.feed(CGFloat(notches), precise: false, shift: shift)
+                offset += notches
+                waitForCalendar { !fixture.scroll.scrolling && !fixture.scroll.programmatic }
+                let expected = Calendar.current.date(byAdding: component, value: offset, to: fixture.initial)!
+                suite.expect(Calendar.current.isDate(fixture.focus, equalTo: expected, toGranularity: component)
+                             && abs(fixture.scroll.contentView.bounds.minX / fixture.scroll.cellWidth
+                                    - (fixture.scroll.contentView.bounds.minX / fixture.scroll.cellWidth).rounded()) < 0.0001,
+                             "each line-wheel notch advances a whole date, with or without Shift (\(component), \(width), \(notches))")
+            }
+            if component == .month {
+                fixture.feed(fixture.scroll.cellWidth * 0.7)
+                waitForCalendar { !fixture.scroll.scrolling && !fixture.scroll.programmatic }
+                let expected = Calendar.current.date(byAdding: .month, value: offset + 1, to: fixture.initial)!
+                suite.expect(Calendar.current.isDate(fixture.focus, equalTo: expected, toGranularity: .month)
+                             && abs(fixture.scroll.contentView.bounds.minX / fixture.scroll.cellWidth
+                                    - (fixture.scroll.contentView.bounds.minX / fixture.scroll.cellWidth).rounded()) < 0.0001,
+                             "precise input without phases also finishes on a whole month")
+            }
+        }
+    }
+
+    private static func calendarVisibleTiles(_ suite: TestSuite) {
+        for component in [Calendar.Component.day, .month] {
+            let fixture = CalendarInteractionFixture(component: component, width: 350)
+            defer { fixture.stop() }
+            let count = component == .day ? 7 : 1
+            func check(_ expected: Int) {
+                let tiles = fixture.scroll.documentView?.subviews ?? []
+                let visible = tiles.filter { !$0.isHidden }
+                suite.expect(tiles.count > expected && visible.count == expected
+                             && tiles.allSatisfy { $0.isHidden != $0.frame.intersects(fixture.scroll.contentView.bounds) },
+                             "only intersecting date tiles participate in accessibility and keyboard navigation (\(component), \(expected))")
+                suite.expect(visible.allSatisfy { $0.acceptsFirstMouse(for: nil) },
+                             "visible date tiles accept the first click in a non-key island")
+            }
+            check(count)
+            fixture.feed(0, phase: 1)
+            fixture.feed(fixture.scroll.cellWidth * 0.4, phase: 2)
+            check(count + 1)
+            fixture.feed(fixture.scroll.cellWidth * 80, phase: 2)
+            check(count + 1)
+            fixture.finish()
+        }
+    }
+
     private static func calendarDocument(_ suite: TestSuite) {
         let initial = Date()
         for (component, count, radius) in [(Calendar.Component.day, 7, 14), (.month, 1, 4)] {
@@ -221,7 +398,7 @@ enum NotchGestureTests {
             let contentState = NotchCalendarCarouselContentState(events: [], selectedDay: initial,
                                                                  today: Calendar.current.startOfDay(for: initial))
             let carousel = NotchCalendarCarousel(date: initial, component: component,
-                                                visibleCount: count, browse: { _ in },
+                                                visibleCount: count, browse: { if component == .day { picked = $0 } },
                                                 settled: { picked = $0 }, contentState: contentState) { date in
                 Text(date, format: .dateTime.day())
             }
@@ -349,9 +526,9 @@ enum NotchGestureTests {
             travel += 0.375
             feed(0, momentum: .ended)
             let finalOffset = scroll.contentView.bounds.minX
-            waitForCalendar { settled > 0 && !scroll.scrolling && !scroll.programmatic }
+            waitForCalendar { !scroll.scrolling && !scroll.programmatic }
             let finalDate = calendar.date(byAdding: component, value: Int(travel.rounded()), to: initial)!
-            suite.expect(settled > 0 && !scroll.scrolling
+            suite.expect((component == .day ? settled == 0 && browsed == finalDate : settled > 0) && !scroll.scrolling
                          && calendar.isDate(coordinator.centeredDate, equalTo: finalDate, toGranularity: component),
                          "momentum retains its axis and settles on the final date after the stream ends")
             if component == .month {
@@ -417,7 +594,7 @@ enum NotchGestureTests {
                      && calendar.isDate(coordinator.centeredDate, equalTo: next, toGranularity: .month),
                      "an animated move to another month preserves explicit selection without sending a live browsing callback")
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
-                            wheel1: 0, wheel2: -14, wheel3: 0)!
+                            wheel1: 0, wheel2: -Int32(scroll.cellWidth + 14), wheel3: 0)!
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
         waitForCalendar { settlements > 0 && !scroll.scrolling && !scroll.programmatic }
@@ -558,9 +735,13 @@ enum NotchGestureTests {
                                 wheel1: 0, wheel2: Int32(-travel), wheel3: 0)!
             event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
             scroll.setPosition(4 * scroll.cellWidth, animated: false)
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: 1)
             scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
             suite.expect(abs(scroll.contentView.bounds.minX - 4 * scroll.cellWidth - CGFloat(travel)) < 0.001,
                          "month alignment assistance never resists movement during a gesture")
+            event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: 0)
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: 4)
+            scroll.scrollWheel(with: NSEvent(cgEvent: event)!)
             waitForCalendar { !scroll.scrolling && !scroll.programmatic }
             let expected = 4 * scroll.cellWidth + (abs(travel) < 56 ? 0 : CGFloat(travel))
             suite.expect(abs(scroll.contentView.bounds.minX - expected) < 0.001 && !scroll.programmatic,
@@ -638,14 +819,14 @@ enum NotchGestureTests {
         suite.expect(!scroll.isCoasting && abs(scroll.contentView.bounds.minX - interrupted) < 0.001,
                      "touching the carousel stops the coast immediately without queued movement")
         feed(0, phase: 4, timestamp: 2.2)
-        waitForCalendar { !scroll.scrolling && settled == 1 }
-        suite.expect(!scroll.scrolling && settled == 1,
-                     "a stationary release stays still and settles exactly once")
+        waitForCalendar { !scroll.scrolling }
+        suite.expect(!scroll.scrolling && settled == 0,
+                     "a stationary release stays still without selecting the unchanged month")
         feed(0, phase: 1, timestamp: 3)
         for index in 1...5 { feed(16, phase: 2, timestamp: 3 + Double(index) / 60) }
         feed(0, phase: 4, timestamp: 3 + 5.0 / 60)
-        waitForCalendar { !scroll.isCoasting && !scroll.scrolling && settled == 2 }
-        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 2,
+        waitForCalendar { !scroll.isCoasting && !scroll.scrolling && settled == 1 }
+        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 1,
                      "the exponential coast reaches rest and settles without a hard cutoff")
         coordinator.stop()
         scroll.stop()
@@ -688,6 +869,8 @@ enum NotchGestureTests {
         let window = NSWindow(contentRect: canvas.frame, styleMask: [.borderless], backing: .buffered, defer: true)
         window.contentView = canvas
         canvas.configure(configuration, locale: Locale(identifier: "en_US"))
+        suite.expect(!window.isKeyWindow && canvas.acceptsFirstMouse(for: nil),
+                     "the native month canvas accepts its first date click while the island is inactive")
         let days = NotchCalendarSupport.monthDays(containing: month)
         suite.expect(canvas.date(at: CGPoint(x: 25, y: 5)) == nil
                      && canvas.date(at: CGPoint(x: 25, y: 30)) == days.first,

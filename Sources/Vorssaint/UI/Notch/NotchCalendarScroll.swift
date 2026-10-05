@@ -19,6 +19,10 @@ private final class CalendarCarouselDocument: NSView {
     override var isFlipped: Bool { true }
 }
 
+private final class CalendarCarouselTile: NSHostingView<AnyView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// A rolling native document, rather than a transition between disconnected pages.
 /// Recentring replaces only offscreen dates and preserves the visible fractional offset.
 struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
@@ -65,7 +69,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
         private(set) var renderedCellUpdates = 0
         private var observer: NSObjectProtocol?
         private var anchor: Date
-        private var lastBrowsed: Date?
+        private var lastBrowsed: Date
         private var lastInput: Date
         private var liveReadback: Date?
         private var highlightedDay: Date?
@@ -83,6 +87,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
         init(_ parent: NotchCalendarCarousel) {
             self.parent = parent
             lastInput = parent.date
+            lastBrowsed = parent.date
             anchor = parent.component == .day
                 ? Calendar.current.date(byAdding: .day, value: -(parent.visibleCount / 2),
                                         to: Calendar.current.startOfDay(for: parent.date)) ?? parent.date
@@ -114,13 +119,15 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             layout()
             guard let scroll, pitch > 0 else { return }
             let requested = Calendar.current.startOfDay(for: parent.date)
+            if liveReadback.map({ Calendar.current.isDate(requested, inSameDayAs: $0) }) == true {
+                liveReadback = nil
+                rebuild()
+                return
+            }
             if !Calendar.current.isDate(requested, inSameDayAs: lastInput) {
                 lastInput = requested
-                if liveReadback.map({ Calendar.current.isDate(requested, inSameDayAs: $0) }) == true {
-                    rebuild()
-                    return
-                }
                 liveReadback = nil
+                lastBrowsed = requested
                 reportGeneration += 1
                 scroll.cancelMomentum()
                 let distance = Calendar.current.dateComponents([parent.component], from: anchor, to: requested)
@@ -185,7 +192,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             document.frame = CGRect(origin: .zero, size: CGSize(width: pitch * CGFloat(dates.count), height: viewport.height))
             for (index, date) in dates.enumerated() {
                 let existing = tiles[date]
-                let tile = existing ?? recycled.popLast() ?? NSHostingView(rootView: AnyView(EmptyView()))
+                let tile = existing ?? recycled.popLast() ?? CalendarCarouselTile(rootView: AnyView(EmptyView()))
                 tile.sizingOptions = []
                 let selection = selections[date] ?? NotchCalendarTileSelection()
                 selections[date] = selection
@@ -207,10 +214,29 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
                 renderedLocale = parent.locale.identifier
             }
             renderedViewport = viewport
+            updateVisibility()
             if parent.component == .day {
                 // An unfiltered coming-week agenda has no selected tile.
                 // Only active browsing substitutes the date under the center.
-                updateSelection(selectedDay ?? (scroll.scrolling ? centeredDate : parent.contentState?.selectedDay))
+                let selection = scroll.scrolling ? visibleSelection : liveReadback ?? parent.contentState?.selectedDay
+                updateSelection(selectedDay ?? selection)
+            }
+        }
+        private func isSamePage(_ lhs: Date, _ rhs: Date) -> Bool {
+            Calendar.current.isDate(lhs, equalTo: rhs, toGranularity: parent.component)
+        }
+        private var visibleSelection: Date? {
+            isSamePage(centeredDate, lastInput) ? (liveReadback ?? parent.contentState?.selectedDay) : centeredDate
+        }
+        private func updateVisibility() {
+            guard let scroll else { return }
+            let visible = scroll.contentView.bounds
+            for tile in tiles.values {
+                // Hidden views leave both the accessibility tree and key-view
+                // loop, while their cached content remains available to reuse.
+                let intersection = tile.frame.intersection(visible)
+                let hidden = intersection.width <= 0 || intersection.height <= 0
+                if tile.isHidden != hidden { tile.isHidden = hidden }
             }
         }
         var highlightedDates: [Date] { selections.filter { $0.value.selected }.map(\.key) }
@@ -233,6 +259,10 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             guard let scroll, !scroll.scrolling, !scroll.programmatic, pitch > 0 else { return }
             reportGeneration += 1
             let selected = centeredDate
+            // A return swipe must update a previously reported neighboring
+            // page even if it finishes on the original selection's page.
+            publishVisibleDate(selected)
+            guard !isSamePage(selected, lastInput) else { rebuild(); return }
             lastInput = selected
             rebuild(selectedDay: selected)
             parent.settled(selected)
@@ -254,6 +284,7 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
             reportVisibleDate()
         }
         private func scrolled() {
+            updateVisibility()
             guard let scroll, !updating, !scroll.programmatic, pitch > 0 else { return }
             let relative = position - CGFloat(radius)
             if abs(relative) > CGFloat(rebaseRadius) / 2 { move(by: 0) }
@@ -261,19 +292,28 @@ struct NotchCalendarCarousel<Content: View>: NSViewRepresentable {
         }
         private func reportVisibleDate() {
             let visible = centeredDate
-            if parent.component == .day { updateSelection(visible) }
-            guard lastBrowsed.map({ Calendar.current.isDate(visible, inSameDayAs: $0) }) != true else { return }
+            if parent.component == .day { updateSelection(visibleSelection) }
+            // Invalidate a queued neighbor even when this move returns to the
+            // page already displayed, before its callback had a chance to run.
             reportGeneration += 1
             let generation = reportGeneration
+            guard !isSamePage(visible, lastBrowsed) else { return }
             // AppKit layout/scroll callbacks can run during a SwiftUI update.
             DispatchQueue.main.async { [weak self] in
                 guard let self, generation == self.reportGeneration else { return }
-                self.lastBrowsed = visible
-                // The live day callback feeds selection back through SwiftUI.
-                // It is readback, not a request to animate to a new date.
-                if self.parent.component == .day { self.liveReadback = visible }
-                self.parent.browse(visible)
+                self.publishVisibleDate(visible)
             }
+        }
+        private func publishVisibleDate(_ visible: Date) {
+            guard !isSamePage(visible, lastBrowsed) else { return }
+            lastBrowsed = visible
+            // Live day readback updates the agenda without recentering the
+            // fractional document position. Months commit selection at rest.
+            if parent.component == .day {
+                liveReadback = visible
+                lastInput = visible
+            }
+            parent.browse(visible)
         }
         func stop() {
             reportGeneration += 1
@@ -305,6 +345,8 @@ final class CalendarCarouselScrollView: NSScrollView {
     private var animationGeneration = 0
     private var momentum = NotchCalendarMomentum()
     private var ownsMomentum = false
+    private var moved = false
+    private var alignsUnphasedInput = false
     private var coast: Timer?
     private var coastVelocity = 0.0
     private var lastCoastTick = 0.0
@@ -326,13 +368,14 @@ final class CalendarCarouselScrollView: NSScrollView {
         viewportChanged?()
     }
     override func scrollWheel(with event: NSEvent) {
-        guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
             super.scrollWheel(with: event)
             return
         }
         // The monthly release has one momentum source. Adding AppKit's
         // momentum deltas to the custom coast would accelerate it twice.
         if ownsMomentum && !event.momentumPhase.isEmpty { return }
+        if event.phase.contains(.began) || (!scrolling && event.momentumPhase.isEmpty) { moved = false }
         cancelCoast()
         settle?.cancel()
         animationGeneration += 1
@@ -345,6 +388,7 @@ final class CalendarCarouselScrollView: NSScrollView {
         scrolling = true
         programmatic = false
         let unphased = event.phase.isEmpty && event.momentumPhase.isEmpty
+        alignsUnphasedInput = unphased
         if event.phase.contains(.began) || unphased {
             horizontalInput = nil
             pendingX = 0
@@ -370,9 +414,11 @@ final class CalendarCarouselScrollView: NSScrollView {
         }
         // Apply the same response to finger travel and system momentum, so
         // lifting or reversing direction does not introduce a speed change.
-        delta *= (event.hasPreciseScrollingDeltas ? 1 : 12) * scrollSensitivity
+        // A line-based wheel advances whole dates, including Shift-wheel.
+        // Only precise input needs the gentler point-based monthly response.
+        delta *= event.hasPreciseScrollingDeltas ? scrollSensitivity : cellWidth
         if ownsMomentum { momentum.record(delta: Double(-delta), timestamp: event.timestamp) }
-        if delta.isFinite && delta != 0 { move(by: -delta) }
+        if delta.isFinite && delta != 0 { moved = true; move(by: -delta) }
         let cancelled = event.phase.contains(.cancelled)
         // A finger pause is still an active gesture. Only unphased wheels use
         // inactivity; trackpads settle after lift/momentum end, never mid-swipe.
@@ -411,11 +457,13 @@ final class CalendarCarouselScrollView: NSScrollView {
     }
     private func finishScrolling() {
         scrolling = false
+        guard moved else { return }
+        moved = false
         if cellWidth > 0 {
             let position = contentView.bounds.minX / cellWidth
             let target = position.rounded()
             let nearMonth = monthAlignmentTolerance > 0 && abs(position - target) <= monthAlignmentTolerance
-            if snapsDays || nearMonth {
+            if snapsDays || alignsUnphasedInput || nearMonth {
                 if abs(position - target) > 0.0001 {
                     setPosition(target * cellWidth, animated: !reduceMotion,
                                 duration: snapsDays ? 0.24 : 0.32,

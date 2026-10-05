@@ -58,6 +58,7 @@ final class CalendarMonthCanvasView: NSView {
     private let accent = NSColor(srgbRed: 1, green: 0.36, blue: 0.39, alpha: 1)
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func configure(_ value: NotchCalendarMonthCanvas, locale: Locale) {
         let old = configuration

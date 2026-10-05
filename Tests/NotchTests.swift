@@ -981,7 +981,6 @@ enum NotchTests {
         calendarContracts(suite)
         NotchNotificationTests.run(suite)
         NotchNotificationReaderTests.run(suite)
-        NotchGestureTests.run(suite)
         NotchSectionPagingTests.run(suite)
         NotchKeyboardLightTests.run(suite)
         NotchActivityTests.run(suite)
