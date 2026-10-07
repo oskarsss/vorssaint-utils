@@ -368,9 +368,9 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     private func presentDrawer() {
         guard toggleItem != nil else { return }
         let columns = items.count > 9 ? 4 : 3
-        let width = CGFloat(columns) * 64 + 32
+        let width = CGFloat(columns) * 88 + 28
         let rows = max(1, Int(ceil(Double(items.count) / Double(columns))))
-        let height = min(360, max(150, CGFloat(rows) * 64 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 76 : 156)))
+        let height = min(360, max(150, CGFloat(rows) * 72 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 86 : 166)))
         let point = lastClickPoint
         let screen = point.flatMap { point in NSScreen.screens.first { $0.frame.contains(point) } }
             ?? toggleItem?.button?.window?.screen ?? NSScreen.main
@@ -396,24 +396,39 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             panel.hasShadow = true
             panel.level = .popUpMenu
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let background = NSVisualEffectView(frame: CGRect(origin: .zero, size: frame.size))
-            background.material = .popover
-            background.blendingMode = .behindWindow
-            background.state = .active
-            background.wantsLayer = true
-            background.layer?.cornerRadius = 12
-            background.layer?.masksToBounds = true
             let hosting = NSHostingView(rootView: MenuBarOverflowDrawer(controller: self))
-            hosting.frame = background.bounds
+            hosting.frame = CGRect(origin: .zero, size: frame.size)
             hosting.autoresizingMask = [.width, .height]
-            background.addSubview(hosting)
-            panel.contentView = background
+            panel.contentView = Self.drawerBackdrop(content: hosting)
             drawer = panel
         }
         panel.appearance = NSApp.appearance
         panel.setFrame(frame, display: true)
         panel.makeKeyAndOrderFront(nil)
         installDrawerMonitors()
+    }
+
+    /// Use the system glass renderer rather than a tinted imitation. Older
+    /// systems retain their native popover material and the same geometry.
+    private static func drawerBackdrop(content: NSView) -> NSView {
+#if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: content.frame)
+            glass.style = .regular
+            glass.cornerRadius = 18
+            glass.contentView = content
+            return glass
+        }
+#endif
+        let material = NSVisualEffectView(frame: content.frame)
+        material.material = .popover
+        material.blendingMode = .behindWindow
+        material.state = .active
+        material.wantsLayer = true
+        material.layer?.cornerRadius = 18
+        material.layer?.masksToBounds = true
+        material.addSubview(content)
+        return material
     }
 
     private func installDrawerMonitors() {

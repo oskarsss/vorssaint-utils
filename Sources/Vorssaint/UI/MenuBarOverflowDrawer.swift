@@ -8,16 +8,11 @@ struct MenuBarOverflowDrawer: View {
     @ObservedObject var controller: MenuBarOverflowController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Icon Drawer").font(.headline)
-                Spacer()
-                Button { controller.chooseIcons() } label: {
-                    Image(systemName: "gearshape").frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain).help("Choose icons")
-                .accessibilityLabel("Choose icons for Icon Drawer")
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Icon Drawer")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.top, 2)
+            Divider()
             if controller.isBusy {
                 VStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -44,15 +39,23 @@ struct MenuBarOverflowDrawer: View {
                 VStack(spacing: 10) {
                     Image(systemName: "ellipsis.circle").font(.system(size: 28)).foregroundStyle(.secondary)
                     Text("Your less-used icons go here.").font(.caption).foregroundStyle(.secondary)
-                    Button("Choose icons…") { controller.chooseIcons() }
                 }.frame(maxWidth: .infinity)
             }
+            Divider()
+            Button { controller.chooseIcons() } label: {
+                Text("Choose Icons…")
+                    .font(.system(size: 13))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+                .accessibilityLabel("Choose icons for Icon Drawer")
             if let message = controller.message, AXIsProcessTrusted() {
                 Text(message).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(16)
+        .padding(14)
     }
 }
 
@@ -63,12 +66,12 @@ private struct MenuBarOverflowIcon: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: 6) {
                 Image(nsImage: item.icon).resizable().scaledToFit().frame(width: 28, height: 28)
-                Text(item.name).font(.system(size: 9)).lineLimit(1)
+                Text(item.name).font(.system(size: 11)).lineLimit(1)
             }
-            .frame(maxWidth: .infinity).frame(height: 58)
-            .background(hovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: .infinity).frame(height: 66)
+            .background(hovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
