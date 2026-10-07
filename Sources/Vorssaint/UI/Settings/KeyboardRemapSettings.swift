@@ -14,8 +14,7 @@ struct KeyboardRemapSettings: View {
     @AppStorage(DefaultsKey.keyboardRemapShortcutRules) private var shortcutStorage = "[]"
     @State private var editingKey: KeyboardRemapKeyRule?
     @State private var editingShortcut: KeyboardRemapShortcutRule?
-    @State private var showSuggestion = false
-    @State private var selectedPreset: KeyboardRemapPreset = .capsEscape
+    @State private var selectedPreset: KeyboardRemapPreset?
 
     private func text(_ key: String) -> String { KeyboardRemapStrings.text(key, language: l10n.language) }
     private var config: KeyboardRemapConfiguration {
@@ -107,7 +106,7 @@ struct KeyboardRemapSettings: View {
                             Text(text(preset.noteKey)).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(text("viewSuggestion")) { selectedPreset = preset; showSuggestion = true }
+                        Button(text("viewSuggestion")) { selectedPreset = preset }
                             .accessibilityLabel(text("viewSuggestion") + " " + text(preset.titleKey))
                     }
                 }
@@ -159,11 +158,11 @@ struct KeyboardRemapSettings: View {
                 save(next)
             }
         }
-        .sheet(isPresented: $showSuggestion) {
+        .sheet(item: $selectedPreset) { preset in
             VStack(alignment: .leading, spacing: 16) {
-                Text(text(selectedPreset.titleKey)).font(.title2)
-                Text(text(selectedPreset.noteKey)).foregroundStyle(.secondary)
-                let suggested = selectedPreset.configuration
+                Text(text(preset.titleKey)).font(.title2)
+                Text(text(preset.noteKey)).foregroundStyle(.secondary)
+                let suggested = preset.configuration
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
                     GridRow {
                         Text(text("from")).font(.caption).foregroundStyle(.secondary)
@@ -183,9 +182,9 @@ struct KeyboardRemapSettings: View {
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button(text("cancel")) { showSuggestion = false }
+                    Button(text("cancel")) { selectedPreset = nil }
                     Spacer()
-                    Button(text("addSuggestion")) { var next = config; next.addSuggestion(selectedPreset); save(next); showSuggestion = false }
+                    Button(text("addSuggestion")) { var next = config; next.addSuggestion(preset); save(next); selectedPreset = nil }
                         .keyboardShortcut(.defaultAction)
                 }
             }.padding(24).frame(width: 560)
