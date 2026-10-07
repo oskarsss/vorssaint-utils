@@ -10,13 +10,13 @@ struct MenuBarOverflowShelf: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Other").font(.headline)
+                Text("Shelf").font(.headline)
                 Spacer()
                 Button { controller.chooseIcons() } label: {
                     Image(systemName: "gearshape").frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain).help("Choose icons")
-                .accessibilityLabel("Choose icons for Other")
+                .accessibilityLabel("Choose icons for Shelf")
             }
             if controller.isBusy {
                 VStack(spacing: 8) {
@@ -36,7 +36,7 @@ struct MenuBarOverflowShelf: View {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4),
                                              count: controller.items.count > 9 ? 4 : 3), spacing: 6) {
                         ForEach(controller.items) { item in
-                            OtherShelfIcon(item: item) { controller.open(item) }
+                            MenuBarShelfIcon(item: item) { controller.open(item) }
                         }
                     }
                 }
@@ -56,7 +56,7 @@ struct MenuBarOverflowShelf: View {
     }
 }
 
-private struct OtherShelfIcon: View {
+private struct MenuBarShelfIcon: View {
     let item: MenuBarOverflowController.ShelfItem
     let action: () -> Void
     @State private var hovered = false

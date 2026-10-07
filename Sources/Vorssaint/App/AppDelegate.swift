@@ -1508,7 +1508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         KeepAwakeManager.shared.activate(minutes: sender.tag)
     }
 
-    @objc private func menuOpenOther() {
+    @objc private func menuOpenIconShelf() {
         if UserDefaults.standard.bool(forKey: DefaultsKey.menuBarOverflowEnabled) {
             MenuBarOverflowController.shared.showShelf()
         } else {
@@ -1578,10 +1578,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let settings = NSMenuItem(title: strings.menuSettings, action: #selector(menuOpenSettings), keyEquivalent: ",")
         settings.target = self
         appMenu.addItem(settings)
-        let other = NSMenuItem(title: "Open Other", action: #selector(menuOpenOther), keyEquivalent: "o")
-        other.keyEquivalentModifierMask = [.command, .option]
-        other.target = self
-        appMenu.addItem(other)
+        let iconShelf = NSMenuItem(title: "Open Shelf", action: #selector(menuOpenIconShelf), keyEquivalent: "o")
+        iconShelf.keyEquivalentModifierMask = [.command, .option]
+        iconShelf.target = self
+        appMenu.addItem(iconShelf)
         appMenu.addItem(.separator())
 
         appMenu.addItem(NSMenuItem(title: strings.menuHide,

@@ -7,7 +7,7 @@ import Combine
 import SwiftUI
 import MenuBarVisibilityBridge
 
-/// One Other button and one shelf of less-used status icons. On macOS 27
+/// One Shelf button and one shelf of less-used status icons. On macOS 27
 /// native visibility removes the originals while AXPress opens their menus.
 final class MenuBarOverflowController: NSObject, ObservableObject {
     static let shared = MenuBarOverflowController()
@@ -28,7 +28,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     @Published private(set) var message: String?
     private var toggleItem: NSStatusItem?
     private var spacerItem: NSStatusItem?
-    private var shelf: OtherShelfPanel?
+    private var shelf: MenuBarShelfPanel?
     private var shelfLocalMonitor: Any?
     private var shelfGlobalMonitor: Any?
     private var lastClickPoint: CGPoint?
@@ -148,16 +148,16 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         lastClickPoint = NSEvent.mouseLocation
         if NSApp.currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
-            let open = menu.addItem(withTitle: "Open Other", action: #selector(showShelf), keyEquivalent: "")
+            let open = menu.addItem(withTitle: "Open Shelf", action: #selector(showShelf), keyEquivalent: "")
             open.target = self
             menu.addItem(.separator())
             let arrange = menu.addItem(withTitle: "Arrange icons…", action: #selector(arrangeIcons), keyEquivalent: "")
             arrange.target = self
-            let save = menu.addItem(withTitle: "Move icons on the left into Other", action: #selector(saveArrangement), keyEquivalent: "")
+            let save = menu.addItem(withTitle: "Move icons on the left into Shelf", action: #selector(saveArrangement), keyEquivalent: "")
             save.target = self
             save.isEnabled = !isCollapsed && !isBusy
             menu.addItem(.separator())
-            let disable = menu.addItem(withTitle: "Turn off Other", action: #selector(disable), keyEquivalent: "")
+            let disable = menu.addItem(withTitle: "Turn off Shelf", action: #selector(disable), keyEquivalent: "")
             disable.target = self
             // Explicitly disabled setup actions must stay disabled.
             menu.autoenablesItems = false
@@ -176,7 +176,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         collectAndHide(useSavedSelection: true, openShelf: false)
     }
 
-    func setInOther(_ bundle: String, included: Bool) {
+    func setInShelf(_ bundle: String, included: Bool) {
         var selection = configuredBundles
         if included { selection.insert(bundle) } else { selection.remove(bundle) }
         UserDefaults.standard.set(selection.sorted().joined(separator: ","),
@@ -202,8 +202,8 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         stopHiding()
         isArranging = true
         message = usesNativeVisibility
-            ? "Hold ⌘ and drag the icons you want in Other to the left of its arrow. Then choose Move icons into Other."
-            : "Hold ⌘ and drag icons to the left of the divider, and keep the divider left of the Other arrow. Then choose Move icons into Other."
+            ? "Hold ⌘ and drag the icons you want in Shelf to the left of its arrow. Then choose Move icons into Shelf."
+            : "Hold ⌘ and drag icons to the left of the divider, and keep the divider left of the Shelf arrow. Then choose Move icons into Shelf."
     }
 
     func restoreArrow() {
@@ -240,7 +240,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         guard toggleItem != nil else { return }
         let windowFrame = toggleItem?.button?.window?.frame ?? .zero
         guard AXIsProcessTrusted() else {
-            message = "Allow Vorssaint in System Settings → Privacy & Security → Accessibility, then click Other again."
+            message = "Allow Vorssaint in System Settings → Privacy & Security → Accessibility, then click Shelf again."
             if !requestedPermission {
                 requestedPermission = true
                 _ = AXIsProcessTrustedWithOptions([
@@ -257,7 +257,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         }
         if !usesNativeVisibility {
             guard let divider = spacerItem?.button?.window?.frame, divider.maxX <= windowFrame.minX else {
-                message = "Command-drag the divider to the left of the Other arrow first."
+                message = "Command-drag the divider to the left of the Shelf arrow first."
                 presentShelf()
                 return
             }
@@ -289,7 +289,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let scannedInventory = MenuBarOverflowController.readInventory(descriptors)
             let ownItems = MenuBarOverflowController.readInventory([(ownPID, ownBundle ?? "", "Vorssaint")])
-            let actualBoundary = native ? (ownItems.first { $0.identifier == "vorssaint.other" }?.frame.midX ?? boundary) : boundary
+            let actualBoundary = native ? (ownItems.first { $0.identifier == "vorssaint.menu-bar-shelf" }?.frame.midX ?? boundary) : boundary
             let hidden = useSavedSelection ? saved : MenuBarOverflowSupport.hiddenBundles(
                 items: scannedInventory.map { .init(bundle: $0.bundle, frame: $0.frame) },
                 boundaryX: actualBoundary, rightToLeft: rtl)
@@ -297,7 +297,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             if let ownBundle { allowed.insert(ownBundle) }
             DispatchQueue.main.async { [weak self] in
                 guard let self, request == self.generation else { return }
-                self.arrowAXFrame = ownItems.first { $0.identifier == "vorssaint.other" }?.frame ?? .zero
+                self.arrowAXFrame = ownItems.first { $0.identifier == "vorssaint.menu-bar-shelf" }?.frame ?? .zero
                 for record in scannedInventory where record.bundle.hasPrefix("system:") {
                     self.systemCache[record.bundle] = record
                 }
@@ -318,7 +318,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                     let reopen = openShelf && self.wantsShelfVisible
                     self.stopHiding()
                     self.wantsShelfVisible = reopen
-                    self.message = "Other is empty. Open Settings → Menu bar → Choose icons and select the icons you want here."
+                    self.message = "Shelf is empty. Open Settings → Menu bar → Choose icons and select the icons you want here."
                     if openShelf && self.wantsShelfVisible { self.presentShelf() }
                     return
                 }
@@ -345,7 +345,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                         let reopen = openShelf && self.wantsShelfVisible
                         self.stopHiding()
                         self.wantsShelfVisible = reopen
-                        self.message = error?.localizedDescription ?? "Could not move icons into Other."
+                        self.message = error?.localizedDescription ?? "Could not move icons into Shelf."
                     }
                     self.updateButton()
                     if openShelf && self.wantsShelfVisible { self.presentShelf() }
@@ -373,12 +373,12 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                       screen.frame.maxY - max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)) - 6
         let frame = StatusItemAnchorSupport.pinnedPanelFrame(size: CGSize(width: width, height: height),
             anchorMidX: x, anchorTop: top, visibleFrame: screen.visibleFrame)
-        let panel: OtherShelfPanel
+        let panel: MenuBarShelfPanel
         if let shelf { panel = shelf }
         else {
-            panel = OtherShelfPanel(contentRect: frame,
+            panel = MenuBarShelfPanel(contentRect: frame,
                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.title = "Other"
+            panel.title = "Shelf"
             panel.isReleasedWhenClosed = false
             panel.isOpaque = false
             panel.backgroundColor = .clear
@@ -462,7 +462,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                     // it or reveal the whole bar in response to that timeout.
                     guard let self, result != .success, result != .cannotComplete else { return }
                     self.stopHiding()
-                    self.message = "\(item.name) could not open its menu from Other. Its original icon is visible again; click it in the menu bar."
+                    self.message = "\(item.name) could not open its menu from Shelf. Its original icon is visible again; click it in the menu bar."
                 }
             }
         }
@@ -498,7 +498,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                     guard let self, request == self.generation else { return }
                     if result != .success && result != .cannotComplete {
                         self.collectAndHide(useSavedSelection: true, openShelf: false)
-                        self.message = "Could not open \(item.name). Try again from Other."
+                        self.message = "Could not open \(item.name). Try again from Shelf."
                     } else { self.waitForSystemMenuToClose(request: request) }
                 }
             }
@@ -531,10 +531,10 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
 
     private func updateButton() {
         toggleItem?.button?.image = NSImage(systemSymbolName: "chevron.down",
-                                            accessibilityDescription: "Other menu bar icons")
-        toggleItem?.button?.toolTip = "Other — open the icon shelf. Right-click to arrange icons."
-        toggleItem?.button?.setAccessibilityLabel("Other menu bar icons")
-        toggleItem?.button?.setAccessibilityIdentifier("vorssaint.other")
+                                            accessibilityDescription: "Shelf menu bar icons")
+        toggleItem?.button?.toolTip = "Shelf — open the icon shelf. Right-click to arrange icons."
+        toggleItem?.button?.setAccessibilityLabel("Shelf menu bar icons")
+        toggleItem?.button?.setAccessibilityIdentifier("vorssaint.menu-bar-shelf")
     }
 
     private struct Record {
@@ -611,7 +611,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     }
 }
 
-private final class OtherShelfPanel: NSPanel {
+private final class MenuBarShelfPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

@@ -8,10 +8,10 @@ struct MenuBarOverflowSettings: View {
     @AppStorage(DefaultsKey.menuBarOverflowEnabled) private var enabled = false
 
     var body: some View {
-        SettingsCard(title: "Other") {
+        SettingsCard(title: "Shelf") {
             SettingsRow(symbol: "chevron.down", title: "Icon shelf",
                         caption: "Keep less-used icons under one arrow.") {
-                Toggle("Other icon shelf", isOn: $enabled)
+                Toggle("Menu bar icon shelf", isOn: $enabled)
                     .labelsHidden().toggleStyle(.switch)
             }
             if enabled {
@@ -24,7 +24,7 @@ struct MenuBarOverflowSettings: View {
                                     .frame(width: 18, height: 18)
                                 Toggle(item.name, isOn: Binding(
                                     get: { selectedBundles.split(separator: ",").contains(Substring(item.bundle)) },
-                                    set: { overflow.setInOther(item.bundle, included: $0) }
+                                    set: { overflow.setInShelf(item.bundle, included: $0) }
                                 )).toggleStyle(.checkbox)
                                     .lineLimit(1).help(item.name)
                                     .disabled(overflow.isBusy)
@@ -46,7 +46,7 @@ struct MenuBarOverflowSettings: View {
                     }.font(.callout)
                 }
                 HStack {
-                    Button("Open Other") { overflow.showShelf() }
+                    Button("Open Shelf") { overflow.showShelf() }
                     Spacer()
                     Button("Reset arrow position") { overflow.restoreArrow() }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
