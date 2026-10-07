@@ -673,6 +673,7 @@ enum NotchTests {
 
     /// Cover the menu bar even when it ends below the camera's safe area.
     private static func physicalStripContracts(_ suite: TestSuite) {
+        NotchGapScreenshots.capture()
         let screen = CGRect(x: 0, y: 0, width: 1470, height: 956)
         for safeTop: CGFloat in [24, 32, 37.5, 40] {
             for barHeight: CGFloat in [24, 32, 33, 37, 38, 40, 64] {
