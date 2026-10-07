@@ -12,6 +12,11 @@ enum MenuBarOverflowTests {
         suite.expect(MenuBarOverflowSupport.stableOrder(previous: ["app", "system", "gone"],
                      current: ["system", "new", "app", "new"]) == ["app", "system", "new"],
                      "hiding or showing an icon preserves chooser rows, appends new icons and removes departed icons")
+        suite.expect(MenuBarOverflowSupport.allowedBundles(running: ["own.app", "hidden.app", "visible.app"],
+                     selection: ["own.app", "hidden.app", "system:7"], ownBundle: "own.app") == ["own.app", "visible.app"],
+                     "native visibility always keeps the drawer owner available while hiding selected apps")
+        suite.expect(MenuBarOverflowSupport.allowedSystemItems(selection: ["system:2", "system:8", "system:99"]).count == 256,
+                     "stored keys cannot hide clock, Control Center or unknown system items")
         typealias Item = MenuBarOverflowSupport.Item
         func item(_ bundle: String, _ x: CGFloat, _ width: CGFloat = 20) -> Item {
             Item(bundle: bundle, frame: CGRect(x: x, y: 0, width: width, height: 24))

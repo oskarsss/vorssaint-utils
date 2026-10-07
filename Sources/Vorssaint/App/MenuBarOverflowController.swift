@@ -7,13 +7,13 @@ import Combine
 import SwiftUI
 import MenuBarVisibilityBridge
 
-/// One Shelf button and one shelf of less-used status icons. On macOS 27
+/// One Icon Drawer button and one grid of less-used status icons. On macOS 27
 /// native visibility removes the originals while AXPress opens their menus.
 final class MenuBarOverflowController: NSObject, ObservableObject {
     static let shared = MenuBarOverflowController()
     var onChooseIcons: (() -> Void)?
     @Published var isChoosingIcons = false
-    struct ShelfItem: Identifiable {
+    struct OverflowItem: Identifiable {
         let id: String
         let bundle: String
         let name: String
@@ -21,21 +21,21 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         let element: AXUIElement
         let frame: CGRect
     }
-    @Published private(set) var items: [ShelfItem] = []
-    @Published private(set) var availableItems: [ShelfItem] = []
+    @Published private(set) var items: [OverflowItem] = []
+    @Published private(set) var availableItems: [OverflowItem] = []
     @Published private(set) var isCollapsed = false
     @Published private(set) var isBusy = false
     @Published private(set) var message: String?
     private var toggleItem: NSStatusItem?
     private var spacerItem: NSStatusItem?
-    private var shelf: MenuBarShelfPanel?
-    private var shelfLocalMonitor: Any?
-    private var shelfGlobalMonitor: Any?
+    private var drawer: MenuBarOverflowPanel?
+    private var drawerLocalMonitor: Any?
+    private var drawerGlobalMonitor: Any?
     private var lastClickPoint: CGPoint?
     private var arrowAXFrame = CGRect.zero
-    private var systemCache: [String: Record] = [:]
+    private var systemCache: [String: MenuBarOverflowInventory.Record] = [:]
     private var systemMenuTimer: Timer?
-    private var wantsShelfVisible = false
+    private var wantsDrawerVisible = false
     private var assertion: Any?
     private var generation = 0
     private var observers: [NSObjectProtocol] = []
@@ -70,9 +70,9 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.closeShelf()
+            self.closeDrawer()
             if self.usesNativeVisibility, !self.isArranging, !self.configuredBundles.isEmpty {
-                self.collectAndHide(useSavedSelection: true, openShelf: false)
+                self.collectAndHide(useSavedSelection: true, openDrawer: false)
             } else { self.arrangeIcons() }
         })
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
@@ -81,7 +81,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             ) { [weak self] _ in
                 guard let self, self.toggleItem != nil, !self.isArranging,
                       !self.configuredBundles.isEmpty else { return }
-                self.collectAndHide(useSavedSelection: true, openShelf: false)
+                self.collectAndHide(useSavedSelection: true, openDrawer: false)
             })
         }
         syncEnabled()
@@ -94,7 +94,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                 guard selection != lastSelection else { return }
                 lastSelection = selection
                 if selection.isEmpty { stopHiding(); items = [] }
-                else { collectAndHide(useSavedSelection: true, openShelf: false, refreshInventory: !usesNativeVisibility || availableItems.isEmpty) }
+                else { collectAndHide(useSavedSelection: true, openDrawer: false, refreshInventory: !usesNativeVisibility || availableItems.isEmpty) }
                 return
             }
             lastSelection = configuredBundles
@@ -125,11 +125,11 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             item.button?.action = #selector(clicked)
             item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
             message = nil
-            updateButton()
+            configureButton()
             if !configuredBundles.isEmpty {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                     guard let self, self.toggleItem != nil, !self.isArranging else { return }
-                    self.collectAndHide(useSavedSelection: true, openShelf: false)
+                    self.collectAndHide(useSavedSelection: true, openDrawer: false)
                 }
             }
         } else if toggleItem != nil {
@@ -148,23 +148,23 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         lastClickPoint = NSEvent.mouseLocation
         if NSApp.currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
-            let open = menu.addItem(withTitle: "Open Shelf", action: #selector(showShelf), keyEquivalent: "")
+            let open = menu.addItem(withTitle: "Open Icon Drawer", action: #selector(showDrawer), keyEquivalent: "")
             open.target = self
             menu.addItem(.separator())
             let arrange = menu.addItem(withTitle: "Arrange icons…", action: #selector(arrangeIcons), keyEquivalent: "")
             arrange.target = self
-            let save = menu.addItem(withTitle: "Move icons on the left into Shelf", action: #selector(saveArrangement), keyEquivalent: "")
+            let save = menu.addItem(withTitle: "Move icons on the left into Icon Drawer", action: #selector(saveArrangement), keyEquivalent: "")
             save.target = self
             save.isEnabled = !isCollapsed && !isBusy
             menu.addItem(.separator())
-            let disable = menu.addItem(withTitle: "Turn off Shelf", action: #selector(disable), keyEquivalent: "")
+            let disable = menu.addItem(withTitle: "Turn off Icon Drawer", action: #selector(disable), keyEquivalent: "")
             disable.target = self
             // Explicitly disabled setup actions must stay disabled.
             menu.autoenablesItems = false
             toggleItem?.menu = menu
             toggleItem?.button?.performClick(nil)
             toggleItem?.menu = nil
-        } else { showShelf() }
+        } else { showDrawer() }
     }
 
     @objc private func disable() {
@@ -173,10 +173,10 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     }
 
     func loadAvailableIcons() {
-        collectAndHide(useSavedSelection: true, openShelf: false)
+        collectAndHide(useSavedSelection: true, openDrawer: false)
     }
 
-    func setInShelf(_ bundle: String, included: Bool) {
+    func setIncluded(_ bundle: String, included: Bool) {
         var selection = configuredBundles
         if included { selection.insert(bundle) } else { selection.remove(bundle) }
         UserDefaults.standard.set(selection.sorted().joined(separator: ","),
@@ -184,17 +184,17 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     }
 
     func chooseIcons() {
-        closeShelf()
+        closeDrawer()
         isChoosingIcons = true
         onChooseIcons?()
     }
 
-    @objc func showShelf() {
-        if shelf?.isVisible == true { closeShelf(); return }
-        wantsShelfVisible = true
-        presentShelf()
+    @objc func showDrawer() {
+        if drawer?.isVisible == true { closeDrawer(); return }
+        wantsDrawerVisible = true
+        presentDrawer()
         if !isCollapsed && !isBusy {
-            collectAndHide(useSavedSelection: !isArranging, openShelf: true)
+            collectAndHide(useSavedSelection: !isArranging, openDrawer: true)
         }
     }
 
@@ -202,8 +202,8 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         stopHiding()
         isArranging = true
         message = usesNativeVisibility
-            ? "Hold ⌘ and drag the icons you want in Shelf to the left of its arrow. Then choose Move icons into Shelf."
-            : "Hold ⌘ and drag icons to the left of the divider, and keep the divider left of the Shelf arrow. Then choose Move icons into Shelf."
+            ? "Hold ⌘ and drag the icons you want in Icon Drawer to the left of its arrow. Then choose Move icons into Icon Drawer."
+            : "Hold ⌘ and drag icons to the left of the divider, and keep the divider left of the Icon Drawer arrow. Then choose Move icons into Icon Drawer."
     }
 
     func restoreArrow() {
@@ -218,47 +218,46 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     }
 
     @objc func saveArrangement() {
-        collectAndHide(useSavedSelection: false, openShelf: false)
+        collectAndHide(useSavedSelection: false, openDrawer: false)
     }
 
     func stopHiding() {
         systemMenuTimer?.invalidate()
         systemMenuTimer = nil
         generation += 1
-        closeShelf()
+        closeDrawer()
         if let assertion { VSMenuBarVisibilityRelease(assertion) }
         assertion = nil
         spacerItem?.length = 18
         isCollapsed = false
         isBusy = false
-        updateButton()
     }
 
-    private func collectAndHide(useSavedSelection: Bool, openShelf: Bool, refreshInventory: Bool = true) {
+    private func collectAndHide(useSavedSelection: Bool, openDrawer: Bool, refreshInventory: Bool = true) {
         systemMenuTimer?.invalidate()
         systemMenuTimer = nil
         guard toggleItem != nil else { return }
         let windowFrame = toggleItem?.button?.window?.frame ?? .zero
         guard AXIsProcessTrusted() else {
-            message = "Allow Vorssaint in System Settings → Privacy & Security → Accessibility, then click Shelf again."
+            message = "Allow Vorssaint in System Settings → Privacy & Security → Accessibility, then click Icon Drawer again."
             if !requestedPermission {
                 requestedPermission = true
                 _ = AXIsProcessTrustedWithOptions([
                     kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
                 ] as CFDictionary)
             }
-            presentShelf()
+            presentDrawer()
             return
         }
         if usesNativeVisibility, !VSMenuBarVisibilityAvailable() {
             message = "Menu bar hiding is unavailable on this macOS version. All icons remain visible."
-            presentShelf()
+            presentDrawer()
             return
         }
         if !usesNativeVisibility {
             guard let divider = spacerItem?.button?.window?.frame, divider.maxX <= windowFrame.minX else {
-                message = "Command-drag the divider to the left of the Shelf arrow first."
-                presentShelf()
+                message = "Command-drag the divider to the left of the Icon Drawer arrow first."
+                presentDrawer()
                 return
             }
         }
@@ -273,55 +272,38 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let native = usesNativeVisibility
         let apps = NSWorkspace.shared.runningApplications.filter {
-            $0.bundleURL?.pathExtension == "app" && $0.bundleIdentifier != nil
-                && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+            $0.bundleURL?.pathExtension == "app"
+                && $0.bundleIdentifier != MenuBarOverflowInventory.menuBarAgentBundle
+                && $0.processIdentifier != ownPID
         }
-        var descriptors = apps.map { ($0.processIdentifier, $0.bundleIdentifier!, $0.localizedName ?? $0.bundleIdentifier!) }
+        var descriptors = apps.compactMap { app -> MenuBarOverflowInventory.Application? in
+            guard let bundle = app.bundleIdentifier else { return nil }
+            return .init(pid: app.processIdentifier, bundle: bundle, name: app.localizedName ?? bundle)
+        }
         if let agent = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.apple.MenuBarAgent" || $0.localizedName == "MenuBarAgent"
         }) {
-            descriptors.append((agent.processIdentifier, "com.apple.MenuBarAgent", "System"))
+            descriptors.append(.init(pid: agent.processIdentifier, bundle: MenuBarOverflowInventory.menuBarAgentBundle, name: "System"))
         }
         // Checkbox changes need a new allowlist, not a new inventory. Keep the
         // chooser's image objects, identities and row positions intact.
         let cachedInventory = availableItems.map {
-            Record(identifier: nil, id: $0.id, bundle: $0.bundle, name: $0.name, element: $0.element, frame: $0.frame)
+            MenuBarOverflowInventory.Record(identifier: nil, id: $0.id, bundle: $0.bundle, name: $0.name, element: $0.element, frame: $0.frame)
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let scannedInventory = refreshInventory ? Self.readInventory(descriptors) : cachedInventory
-            let ownItems = refreshInventory ? Self.readInventory([(ownPID, ownBundle ?? "", "Vorssaint")]) : []
-            let actualBoundary = native ? (ownItems.first { $0.identifier == "vorssaint.menu-bar-shelf" }?.frame.midX ?? boundary) : boundary
+            let scannedInventory = refreshInventory ? MenuBarOverflowInventory.read(descriptors) : cachedInventory
+            let ownItems = refreshInventory ? MenuBarOverflowInventory.read([.init(pid: ownPID, bundle: ownBundle ?? "", name: "Vorssaint")]) : []
+            let actualBoundary = native ? (ownItems.first { $0.identifier == "vorssaint.icon-drawer" }?.frame.midX ?? boundary) : boundary
             let hidden = useSavedSelection ? saved : MenuBarOverflowSupport.hiddenBundles(
                 items: scannedInventory.map { .init(bundle: $0.bundle, frame: $0.frame) },
                 boundaryX: actualBoundary, rightToLeft: rtl)
-            var allowed = Set(descriptors.map { $0.1 }).subtracting(hidden)
-            if let ownBundle { allowed.insert(ownBundle) }
+            let allowed = MenuBarOverflowSupport.allowedBundles(running: Set(descriptors.map(\.bundle)), selection: hidden, ownBundle: ownBundle)
             DispatchQueue.main.async { [weak self] in
                 guard let self, request == self.generation else { return }
-                if let arrow = ownItems.first(where: { $0.identifier == "vorssaint.menu-bar-shelf" }) {
+                if let arrow = ownItems.first(where: { $0.identifier == "vorssaint.icon-drawer" }) {
                     self.arrowAXFrame = arrow.frame
                 }
-                if refreshInventory {
-                    // NSImage belongs to the UI thread. Resolve images here,
-                    // after the background accessibility read has completed.
-                    let appIcons = Dictionary(NSWorkspace.shared.runningApplications.compactMap { app -> (String, NSImage)? in
-                        guard let bundle = app.bundleIdentifier, let icon = app.icon else { return nil }
-                        return (bundle, icon)
-                    }, uniquingKeysWith: { first, _ in first })
-                    for record in scannedInventory where record.bundle.hasPrefix("system:") {
-                        self.systemCache[record.bundle] = record
-                    }
-                    let inventory = scannedInventory.filter { !$0.bundle.hasPrefix("system:") }
-                        + self.systemCache.values.sorted { $0.name < $1.name }
-                    let refreshed = inventory.map { record in
-                        ShelfItem(id: record.id, bundle: record.bundle, name: record.name,
-                                  icon: appIcons[record.bundle] ?? NSImage(systemSymbolName: Self.systemSymbols[record.bundle] ?? "app", accessibilityDescription: nil)!,
-                                  element: record.element, frame: record.frame)
-                    }
-                    let byID = Dictionary(refreshed.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-                    self.availableItems = MenuBarOverflowSupport.stableOrder(previous: self.availableItems.map(\.id),
-                        current: refreshed.map(\.id)).compactMap { byID[$0] }
-                }
+                if refreshInventory { self.refreshAvailableItems(from: scannedInventory) }
                 self.items = self.availableItems.filter { hidden.contains($0.bundle) }
                 self.isArranging = false
                 if !useSavedSelection {
@@ -329,46 +311,61 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                     UserDefaults.standard.set(hidden.sorted().joined(separator: ","), forKey: DefaultsKey.menuBarOverflowBundles)
                 }
                 guard !hidden.isEmpty else {
-                    let reopen = openShelf && self.wantsShelfVisible
+                    let reopen = openDrawer && self.wantsDrawerVisible
                     self.stopHiding()
-                    self.wantsShelfVisible = reopen
-                    self.message = "Shelf is empty. Open Settings → Menu bar → Choose icons and select the icons you want here."
-                    if openShelf && self.wantsShelfVisible { self.presentShelf() }
+                    self.wantsDrawerVisible = reopen
+                    self.message = "Icon Drawer is empty. Open Settings → Menu bar → Choose icons and select the icons you want here."
+                    if openDrawer && self.wantsDrawerVisible { self.presentDrawer() }
                     return
                 }
                 if !self.usesNativeVisibility {
                     self.spacerItem?.length = min(10_000, max(500, (NSScreen.screens.map { $0.frame.width }.max() ?? 2000) * 2))
                     self.isBusy = false
                     self.isCollapsed = true
-                    self.updateButton()
-                    if openShelf && self.wantsShelfVisible { self.presentShelf() }
+                    if openDrawer && self.wantsDrawerVisible { self.presentDrawer() }
                     return
                 }
-                VSMenuBarVisibilityActivate(Array(allowed), MenuBarOverflowSupport.allowedSystemItems(selection: hidden)) { [weak self] handle, error in
-                    guard let self, request == self.generation else {
-                        if let handle { VSMenuBarVisibilityRelease(handle) }
-                        return
-                    }
+                self.activateVisibility(allowedBundles: allowed, selection: hidden, request: request) { [weak self] activated, error in
+                    guard let self else { return }
                     self.isBusy = false
-                    if let handle {
-                        let previous = self.assertion
-                        self.assertion = handle
-                        if let previous { VSMenuBarVisibilityRelease(previous) }
+                    if activated {
                         self.isCollapsed = true
                     } else {
-                        let reopen = openShelf && self.wantsShelfVisible
+                        let reopen = openDrawer && self.wantsDrawerVisible
                         self.stopHiding()
-                        self.wantsShelfVisible = reopen
-                        self.message = error?.localizedDescription ?? "Could not move icons into Shelf."
+                        self.wantsDrawerVisible = reopen
+                        self.message = error?.localizedDescription ?? "Could not move icons into Icon Drawer."
                     }
-                    self.updateButton()
-                    if openShelf && self.wantsShelfVisible { self.presentShelf() }
+                    if openDrawer && self.wantsDrawerVisible { self.presentDrawer() }
                 }
             }
         }
     }
 
-    private func presentShelf() {
+    private func refreshAvailableItems(from records: [MenuBarOverflowInventory.Record]) {
+        // NSImage belongs to the UI thread. Resolve images here,
+        // after the background accessibility read has completed.
+        let appIcons = Dictionary(NSWorkspace.shared.runningApplications.compactMap { app -> (String, NSImage)? in
+            guard let bundle = app.bundleIdentifier, let icon = app.icon else { return nil }
+            return (bundle, icon)
+        }, uniquingKeysWith: { first, _ in first })
+        for record in records where record.bundle.hasPrefix("system:") {
+            systemCache[record.bundle] = record
+        }
+        let inventory = records.filter { !$0.bundle.hasPrefix("system:") }
+            + systemCache.values.sorted { $0.name < $1.name }
+        let refreshed = inventory.map { record in
+            let symbol = MenuBarOverflowSupport.systemControl(selectionKey: record.bundle)?.symbol ?? "app"
+            let icon = appIcons[record.bundle] ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage()
+            return OverflowItem(id: record.id, bundle: record.bundle, name: record.name,
+                                icon: icon, element: record.element, frame: record.frame)
+        }
+        let byID = Dictionary(refreshed.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        availableItems = MenuBarOverflowSupport.stableOrder(previous: availableItems.map(\.id),
+            current: refreshed.map(\.id)).compactMap { byID[$0] }
+    }
+
+    private func presentDrawer() {
         guard toggleItem != nil else { return }
         let columns = items.count > 9 ? 4 : 3
         let width = CGFloat(columns) * 64 + 32
@@ -387,12 +384,12 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                       screen.frame.maxY - max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)) - 6
         let frame = StatusItemAnchorSupport.pinnedPanelFrame(size: CGSize(width: width, height: height),
             anchorMidX: x, anchorTop: top, visibleFrame: screen.visibleFrame)
-        let panel: MenuBarShelfPanel
-        if let shelf { panel = shelf }
+        let panel: MenuBarOverflowPanel
+        if let drawer { panel = drawer }
         else {
-            panel = MenuBarShelfPanel(contentRect: frame,
+            panel = MenuBarOverflowPanel(contentRect: frame,
                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.title = "Shelf"
+            panel.title = "Icon Drawer"
             panel.isReleasedWhenClosed = false
             panel.isOpaque = false
             panel.backgroundColor = .clear
@@ -406,34 +403,34 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             background.wantsLayer = true
             background.layer?.cornerRadius = 12
             background.layer?.masksToBounds = true
-            let hosting = NSHostingView(rootView: MenuBarOverflowShelf(controller: self))
+            let hosting = NSHostingView(rootView: MenuBarOverflowDrawer(controller: self))
             hosting.frame = background.bounds
             hosting.autoresizingMask = [.width, .height]
             background.addSubview(hosting)
             panel.contentView = background
-            shelf = panel
+            drawer = panel
         }
         panel.appearance = NSApp.appearance
         panel.setFrame(frame, display: true)
         panel.makeKeyAndOrderFront(nil)
-        installShelfMonitors()
+        installDrawerMonitors()
     }
 
-    private func installShelfMonitors() {
-        guard shelfLocalMonitor == nil else { return }
-        shelfLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+    private func installDrawerMonitors() {
+        guard drawerLocalMonitor == nil else { return }
+        drawerLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
             guard let self else { return event }
             if event.type == .keyDown, event.keyCode == 53 {
-                self.closeShelf()
+                self.closeDrawer()
                 return nil
             }
-            if event.type != .keyDown, self.shelf?.frame.contains(NSEvent.mouseLocation) != true {
+            if event.type != .keyDown, self.drawer?.frame.contains(NSEvent.mouseLocation) != true {
                 // Let the arrow's own mouse-up toggle the dropdown once.
-                if event.window !== self.toggleItem?.button?.window { self.closeShelf() }
+                if event.window !== self.toggleItem?.button?.window { self.closeDrawer() }
             }
             return event
         }
-        shelfGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        drawerGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self else { return }
             let point = NSEvent.mouseLocation
             // On macOS 27 the menu bar belongs to MenuBarAgent, so our arrow's
@@ -442,77 +439,95 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             let inBar = screen.map { point.y >= $0.frame.maxY - max(33, $0.safeAreaInsets.top) } ?? false
             let anchorX = self.lastClickPoint?.x ?? self.arrowAXFrame.midX
             if inBar && abs(point.x - anchorX) < 24 { return }
-            self.closeShelf()
+            self.closeDrawer()
         }
     }
 
-    private func closeShelf() {
-        wantsShelfVisible = false
-        shelf?.orderOut(nil)
-        if let shelfLocalMonitor { NSEvent.removeMonitor(shelfLocalMonitor) }
-        if let shelfGlobalMonitor { NSEvent.removeMonitor(shelfGlobalMonitor) }
-        shelfLocalMonitor = nil
-        shelfGlobalMonitor = nil
+    private func closeDrawer() {
+        wantsDrawerVisible = false
+        drawer?.orderOut(nil)
+        if let drawerLocalMonitor { NSEvent.removeMonitor(drawerLocalMonitor) }
+        if let drawerGlobalMonitor { NSEvent.removeMonitor(drawerGlobalMonitor) }
+        drawerLocalMonitor = nil
+        drawerGlobalMonitor = nil
     }
 
     func openAccessibilitySettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        NSWorkspace.shared.open(url)
     }
 
-    func open(_ item: ShelfItem) {
-        closeShelf()
+    func open(_ item: OverflowItem) {
+        closeDrawer()
         if item.bundle.hasPrefix("system:"), usesNativeVisibility {
             openSystemMenu(item)
             return
         }
-        // Let the transient shelf relinquish focus before the other app opens
+        // Let the transient drawer relinquish focus before the other app opens
         // its native status menu. No synthetic pointer events or app launches.
+        let request = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self, request == self.generation else { return }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 let result = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
                 DispatchQueue.main.async { [weak self] in
                     // Some status menus enter a tracking loop before replying to AXPress.
                     // cannotComplete can mean that the menu opened, so never dismiss
                     // it or reveal the whole bar in response to that timeout.
-                    guard let self, result != .success, result != .cannotComplete else { return }
+                    guard let self, request == self.generation,
+                          result != .success, result != .cannotComplete else { return }
                     self.stopHiding()
-                    self.message = "\(item.name) could not open its menu from Shelf. Its original icon is visible again; click it in the menu bar."
+                    self.message = "\(item.name) could not open its menu from Icon Drawer. Its original icon is visible again; click it in the menu bar."
                 }
             }
         }
     }
 
-    private func openSystemMenu(_ item: ShelfItem) {
-        systemMenuTimer?.invalidate()
-        generation += 1
-        let request = generation
-        let selection = configuredBundles.subtracting([item.bundle])
-        var allowed = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
-            .subtracting(selection)
-        if let own = Bundle.main.bundleIdentifier { allowed.insert(own) }
-        VSMenuBarVisibilityActivate(Array(allowed), MenuBarOverflowSupport.allowedSystemItems(selection: selection)) { [weak self] handle, error in
+    /// Install a replacement before releasing the old assertion. Obsolete
+    /// completions release their handles without changing current UI state.
+    private func activateVisibility(allowedBundles: [String], selection: Set<String>, request: Int,
+                                    completion: @escaping (Bool, Error?) -> Void) {
+        VSMenuBarVisibilityActivate(allowedBundles, MenuBarOverflowSupport.allowedSystemItems(selection: selection)) { [weak self] handle, error in
             guard let self, request == self.generation else {
                 if let handle { VSMenuBarVisibilityRelease(handle) }
                 return
             }
-            guard let handle else {
+            if let handle {
+                let previous = self.assertion
+                self.assertion = handle
+                if let previous { VSMenuBarVisibilityRelease(previous) }
+                completion(true, nil)
+            } else {
+                completion(false, error)
+            }
+        }
+    }
+
+    private func openSystemMenu(_ item: OverflowItem) {
+        systemMenuTimer?.invalidate()
+        generation += 1
+        let request = generation
+        let selection = configuredBundles.subtracting([item.bundle])
+        let allowed = MenuBarOverflowSupport.allowedBundles(
+            running: Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier }),
+            selection: selection, ownBundle: Bundle.main.bundleIdentifier)
+        activateVisibility(allowedBundles: allowed, selection: selection, request: request) { [weak self] activated, error in
+            guard let self else { return }
+            guard activated else {
                 self.message = error?.localizedDescription ?? "Could not open \(item.name)."
                 return
             }
-            let previous = self.assertion
-            self.assertion = handle
-            if let previous { VSMenuBarVisibilityRelease(previous) }
             let agents = NSWorkspace.shared.runningApplications.filter {
                 $0.bundleIdentifier == "com.apple.MenuBarAgent" || $0.localizedName == "MenuBarAgent"
-            }.map { ($0.processIdentifier, "com.apple.MenuBarAgent", "System") }
+            }.map { MenuBarOverflowInventory.Application(pid: $0.processIdentifier, bundle: MenuBarOverflowInventory.menuBarAgentBundle, name: "System") }
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                let fresh = Self.readInventory(agents).first { $0.bundle == item.bundle }
+                let fresh = MenuBarOverflowInventory.read(agents).first { $0.bundle == item.bundle }
                 let result = fresh.map { AXUIElementPerformAction($0.element, kAXPressAction as CFString) } ?? .invalidUIElement
                 DispatchQueue.main.async { [weak self] in
                     guard let self, request == self.generation else { return }
                     if result != .success && result != .cannotComplete {
-                        self.collectAndHide(useSavedSelection: true, openShelf: false)
-                        self.message = "Could not open \(item.name). Try again from Shelf."
+                        self.collectAndHide(useSavedSelection: true, openDrawer: false)
+                        self.message = "Could not open \(item.name). Try again from Icon Drawer."
                     } else { self.waitForSystemMenuToClose(request: request) }
                 }
             }
@@ -538,94 +553,23 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             if (!visible && sawMenu) || (!sawMenu && Date().timeIntervalSince(started) > 3) {
                 timer.invalidate()
                 self.systemMenuTimer = nil
-                self.collectAndHide(useSavedSelection: true, openShelf: false)
+                self.collectAndHide(useSavedSelection: true, openDrawer: false)
             }
         }
     }
 
-    private func updateButton() {
+    private func configureButton() {
         toggleItem?.button?.image = NSImage(systemSymbolName: "chevron.down",
-                                            accessibilityDescription: "Shelf menu bar icons")
-        toggleItem?.button?.toolTip = "Shelf — open the icon shelf. Right-click to arrange icons."
-        toggleItem?.button?.setAccessibilityLabel("Shelf menu bar icons")
-        toggleItem?.button?.setAccessibilityIdentifier("vorssaint.menu-bar-shelf")
+                                            accessibilityDescription: "Icon Drawer menu bar icons")
+        toggleItem?.button?.toolTip = "Icon Drawer — open your hidden menu bar icons. Right-click to arrange icons."
+        toggleItem?.button?.setAccessibilityLabel("Icon Drawer menu bar icons")
+        toggleItem?.button?.setAccessibilityIdentifier("vorssaint.icon-drawer")
     }
 
-    private struct Record {
-        let identifier: String?
-        let id: String
-        let bundle: String
-        let name: String
-        let element: AXUIElement
-        let frame: CGRect
-    }
 
-    private static let systemIdentifiers: [String: (Int, String)] = [
-        "com.apple.menuextra.battery": (0, "Battery"),
-        "com.apple.menuextra.bluetooth": (1, "Bluetooth"),
-        "com.apple.menuextra.displays": (3, "Displays"),
-        "com.apple.menuextra.keyboard": (4, "Keyboard"),
-        "com.apple.menuextra.volume": (5, "Sound"),
-        "com.apple.menuextra.wifi": (6, "Wi-Fi"),
-        "com.apple.menuextra.screen-mirroring": (7, "Screen Mirroring")
-    ]
-    private static let systemSymbols = ["system:0": "battery.100", "system:1": "antenna.radiowaves.left.and.right",
-        "system:3": "display", "system:4": "keyboard", "system:5": "speaker.wave.2",
-        "system:6": "wifi", "system:7": "rectangle.on.rectangle"]
-
-    private static func menuElements(_ element: AXUIElement, depth: Int = 0) -> [AXUIElement] {
-        guard depth < 4 else { return [] }
-        var role: CFTypeRef?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-        if role as? String == kAXMenuBarItemRole as String { return [element] }
-        var children: CFTypeRef?
-        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
-        return (children as? [AXUIElement] ?? []).flatMap { menuElements($0, depth: depth + 1) }
-    }
-
-    private static func readInventory(_ apps: [(pid_t, String, String)]) -> [Record] {
-        var records: [Record] = []
-        for (pid, bundle, appName) in apps {
-            let system = bundle == "com.apple.MenuBarAgent"
-            guard system || !bundle.hasPrefix("com.apple.") else { continue }
-            let app = AXUIElementCreateApplication(pid)
-            AXUIElementSetMessagingTimeout(app, 0.1)
-            var bar: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &bar) == .success,
-                  let bar, CFGetTypeID(bar) == AXUIElementGetTypeID() else { continue }
-            var children: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(bar as! AXUIElement, kAXChildrenAttribute as CFString, &children) == .success,
-                  let elements = children as? [AXUIElement] else { continue }
-            let candidates = system ? elements.flatMap { menuElements($0) } : elements
-            for (index, element) in candidates.enumerated() {
-                var position: CFTypeRef?
-                var size: CFTypeRef?
-                var identifier: CFTypeRef?
-                AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
-                let systemInfo = (identifier as? String).flatMap { systemIdentifiers[$0] }
-                if system && systemInfo == nil { continue }
-                let recordBundle = systemInfo.map { "system:\($0.0)" } ?? bundle
-                let name = systemInfo?.1 ?? appName
-                var frame = CGRect.zero
-                if AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &position) == .success,
-                   AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &size) == .success,
-                   let position, let size,
-                   CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() {
-                    var point = CGPoint.zero
-                    var dimensions = CGSize.zero
-                    if AXValueGetValue(position as! AXValue, .cgPoint, &point),
-                       AXValueGetValue(size as! AXValue, .cgSize, &dimensions) {
-                        frame = CGRect(origin: point, size: dimensions)
-                    }
-                }
-                records.append(.init(identifier: identifier as? String, id: system ? recordBundle : "\(recordBundle):\(identifier as? String ?? String(index))", bundle: recordBundle, name: name, element: element, frame: frame))
-            }
-        }
-        return records.sorted { $0.frame.minX < $1.frame.minX }
-    }
 }
 
-private final class MenuBarShelfPanel: NSPanel {
+private final class MenuBarOverflowPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
