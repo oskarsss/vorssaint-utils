@@ -899,19 +899,26 @@ enum NotchGestureTests {
                      "fast monthly scrolling continues smoothly after the final input event")
         feed(0, phase: 1, timestamp: 2)
         let interrupted = scroll.contentView.bounds.minX
+        // A loaded runner may deliver its first coast tick after crossing
+        // the month boundary. Settlement follows the page actually reached.
+        let interruptedMonth = coordinator.centeredDate
+        let interruptedSettlements = Calendar.current.isDate(interruptedMonth, equalTo: initial, toGranularity: .month) ? 0 : 1
         pumpCalendar(for: 0.1)
         suite.expect(!scroll.isCoasting && abs(scroll.contentView.bounds.minX - interrupted) < 0.001,
                      "touching the carousel stops the coast immediately without queued movement")
         feed(0, phase: 4, timestamp: 2.2)
         waitForCalendar { !scroll.scrolling }
-        suite.expect(!scroll.scrolling && settled == 0,
-                     "a stationary release stays still without selecting the unchanged month")
+        suite.expect(!scroll.scrolling && settled == interruptedSettlements,
+                     "a stationary release commits an interrupted coast only if it reached another month")
         feed(0, phase: 1, timestamp: 3)
         for index in 1...5 { feed(16, phase: 2, timestamp: 3 + Double(index) / 60) }
         feed(0, phase: 4, timestamp: 3 + 5.0 / 60)
-        waitForCalendar { !scroll.isCoasting && !scroll.scrolling && settled == 1 }
-        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 1,
-                     "the exponential coast reaches rest and settles without a hard cutoff")
+        waitForCalendar { !scroll.isCoasting && !scroll.scrolling }
+        let previousMonth = interruptedSettlements == 0 ? initial : interruptedMonth
+        let crossedMonth = !Calendar.current.isDate(coordinator.centeredDate, equalTo: previousMonth, toGranularity: .month)
+        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == interruptedSettlements + (crossedMonth ? 1 : 0),
+                     "the exponential coast reaches rest and settles a changed month without a hard cutoff")
+        let settlementsBeforeInterruption = settled
         feed(400, phase: 1, timestamp: 6)
         feed(0, phase: 4, timestamp: 6.01)
         suite.expect(scroll.isCoasting && scroll.scrolling,
@@ -919,8 +926,8 @@ enum NotchGestureTests {
         feed(0, phase: 1, timestamp: 7)
         let stopped = scroll.contentView.bounds.minX
         feed(0, phase: 4, timestamp: 7.2)
-        waitForCalendar { !scroll.scrolling && settled == 2 }
-        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 2
+        waitForCalendar { !scroll.scrolling && settled == settlementsBeforeInterruption + 1 }
+        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == settlementsBeforeInterruption + 1
                      && abs(scroll.contentView.bounds.minX - stopped) < 0.001,
                      "touching and lifting to stop momentum commits the month already reached without further travel")
         coordinator.stop()
