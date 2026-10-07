@@ -27,7 +27,6 @@ struct MenuBarOverflowSettings: View {
                                     set: { overflow.setInShelf(item.bundle, included: $0) }
                                 )).toggleStyle(.checkbox)
                                     .lineLimit(1).help(item.name)
-                                    .disabled(overflow.isBusy)
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }.padding(.vertical, 8)
@@ -38,7 +37,7 @@ struct MenuBarOverflowSettings: View {
                     HStack {
                         Text("Choose icons")
                         Spacer()
-                        if overflow.isBusy { ProgressView().controlSize(.small) }
+                        if overflow.isBusy && overflow.availableItems.isEmpty { ProgressView().controlSize(.small) }
                         else {
                             Text("\(selectedBundles.split(separator: ",").count) selected")
                                 .foregroundStyle(.secondary)

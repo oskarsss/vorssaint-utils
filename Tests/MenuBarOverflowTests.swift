@@ -9,6 +9,9 @@ enum MenuBarOverflowTests {
                      "only selected system IDs are hidden; clock and future controls stay visible")
         suite.expect(MenuBarOverflowSupport.allowedSystemItems(selection: []).count == 256,
                      "all system controls remain allowed by default")
+        suite.expect(MenuBarOverflowSupport.stableOrder(previous: ["app", "system", "gone"],
+                     current: ["system", "new", "app", "new"]) == ["app", "system", "new"],
+                     "hiding or showing an icon preserves chooser rows, appends new icons and removes departed icons")
         typealias Item = MenuBarOverflowSupport.Item
         func item(_ bundle: String, _ x: CGFloat, _ width: CGFloat = 20) -> Item {
             Item(bundle: bundle, frame: CGRect(x: x, y: 0, width: width, height: 24))

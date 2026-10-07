@@ -94,7 +94,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                 guard selection != lastSelection else { return }
                 lastSelection = selection
                 if selection.isEmpty { stopHiding(); items = [] }
-                else { collectAndHide(useSavedSelection: true, openShelf: false) }
+                else { collectAndHide(useSavedSelection: true, openShelf: false, refreshInventory: !usesNativeVisibility || availableItems.isEmpty) }
                 return
             }
             lastSelection = configuredBundles
@@ -234,7 +234,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         updateButton()
     }
 
-    private func collectAndHide(useSavedSelection: Bool, openShelf: Bool) {
+    private func collectAndHide(useSavedSelection: Bool, openShelf: Bool, refreshInventory: Bool = true) {
         systemMenuTimer?.invalidate()
         systemMenuTimer = nil
         guard toggleItem != nil else { return }
@@ -263,7 +263,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             }
         }
         message = nil
-        isBusy = true
+        isBusy = refreshInventory && availableItems.isEmpty
         generation += 1
         let request = generation
         let boundary = spacerItem?.button?.window?.frame.midX ?? windowFrame.midX
@@ -286,9 +286,14 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             guard let bundle = app.bundleIdentifier, let icon = app.icon else { return nil }
             return (bundle, icon)
         }, uniquingKeysWith: { first, _ in first })
+        // Checkbox changes need a new allowlist, not a new inventory. Keep the
+        // chooser's image objects, identities and row positions intact.
+        let cachedInventory = availableItems.map {
+            Record(identifier: nil, id: $0.id, bundle: $0.bundle, name: $0.name, element: $0.element, frame: $0.frame)
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let scannedInventory = MenuBarOverflowController.readInventory(descriptors)
-            let ownItems = MenuBarOverflowController.readInventory([(ownPID, ownBundle ?? "", "Vorssaint")])
+            let scannedInventory = refreshInventory ? Self.readInventory(descriptors) : cachedInventory
+            let ownItems = refreshInventory ? Self.readInventory([(ownPID, ownBundle ?? "", "Vorssaint")]) : []
             let actualBoundary = native ? (ownItems.first { $0.identifier == "vorssaint.menu-bar-shelf" }?.frame.midX ?? boundary) : boundary
             let hidden = useSavedSelection ? saved : MenuBarOverflowSupport.hiddenBundles(
                 items: scannedInventory.map { .init(bundle: $0.bundle, frame: $0.frame) },
@@ -297,16 +302,23 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             if let ownBundle { allowed.insert(ownBundle) }
             DispatchQueue.main.async { [weak self] in
                 guard let self, request == self.generation else { return }
-                self.arrowAXFrame = ownItems.first { $0.identifier == "vorssaint.menu-bar-shelf" }?.frame ?? .zero
-                for record in scannedInventory where record.bundle.hasPrefix("system:") {
-                    self.systemCache[record.bundle] = record
+                if let arrow = ownItems.first(where: { $0.identifier == "vorssaint.menu-bar-shelf" }) {
+                    self.arrowAXFrame = arrow.frame
                 }
-                let inventory = scannedInventory.filter { !$0.bundle.hasPrefix("system:") }
-                    + self.systemCache.values.sorted { $0.name < $1.name }
-                self.availableItems = inventory.map { record in
-                    ShelfItem(id: record.id, bundle: record.bundle, name: record.name,
-                              icon: appIcons[record.bundle] ?? NSImage(systemSymbolName: Self.systemSymbols[record.bundle] ?? "app", accessibilityDescription: nil)!,
-                              element: record.element, frame: record.frame)
+                if refreshInventory {
+                    for record in scannedInventory where record.bundle.hasPrefix("system:") {
+                        self.systemCache[record.bundle] = record
+                    }
+                    let inventory = scannedInventory.filter { !$0.bundle.hasPrefix("system:") }
+                        + self.systemCache.values.sorted { $0.name < $1.name }
+                    let refreshed = inventory.map { record in
+                        ShelfItem(id: record.id, bundle: record.bundle, name: record.name,
+                                  icon: appIcons[record.bundle] ?? NSImage(systemSymbolName: Self.systemSymbols[record.bundle] ?? "app", accessibilityDescription: nil)!,
+                                  element: record.element, frame: record.frame)
+                    }
+                    let byID = Dictionary(refreshed.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                    self.availableItems = MenuBarOverflowSupport.stableOrder(previous: self.availableItems.map(\.id),
+                        current: refreshed.map(\.id)).compactMap { byID[$0] }
                 }
                 self.items = self.availableItems.filter { hidden.contains($0.bundle) }
                 self.isArranging = false
@@ -604,7 +616,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                         frame = CGRect(origin: point, size: dimensions)
                     }
                 }
-                records.append(.init(identifier: identifier as? String, id: "\(recordBundle):\(pid):\(index)", bundle: recordBundle, name: name, element: element, frame: frame))
+                records.append(.init(identifier: identifier as? String, id: system ? recordBundle : "\(recordBundle):\(identifier as? String ?? String(index))", bundle: recordBundle, name: name, element: element, frame: frame))
             }
         }
         return records.sorted { $0.frame.minX < $1.frame.minX }
