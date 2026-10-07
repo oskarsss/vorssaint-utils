@@ -1752,6 +1752,8 @@ struct NotchGeometry: Equatable {
     /// notice reaches further toward its wider side. Zero everywhere else.
     var surfaceShift: CGFloat = 0
     let cameraWidth: CGFloat
+    /// The island's camera region, including optional menu-bar coverage,
+    /// manual fit and outline clearance, rather than just the hardware inset.
     let cameraHeight: CGFloat
     let isNotched: Bool
     let layout: NotchSize
@@ -1817,10 +1819,14 @@ struct NotchGeometry: Equatable {
         self.cameraWidth = min(isNotched ? max(0, cameraWidth + fit.width + room * 2)
                                : gap == nil ? simulated : (simulated + capsuleFit.width).rounded(),
                                screen.width * 0.7)
-        // The menu bar can extend slightly below the camera's safe area.
-        // Optionally cover its full height before applying a manual fit.
-        let coverHeight = hideMenuBarGap ? max(safeAreaTop, barHeight) : safeAreaTop
-        cameraHeight = isNotched ? min(max(0, coverHeight + fit.height + room), 64) : stripHeight
+        if isNotched {
+            // The menu bar can extend slightly below the camera's safe area.
+            // Optionally cover its full height before applying a manual fit.
+            let baseHeight = hideMenuBarGap ? max(safeAreaTop, barHeight) : safeAreaTop
+            cameraHeight = min(max(0, baseHeight + fit.height + room), 64)
+        } else {
+            cameraHeight = stripHeight
+        }
         self.menuBarHeight = max(cameraHeight, barHeight)
         self.compactSideRoom = compactSideRoom
     }
@@ -1857,8 +1863,7 @@ struct NotchGeometry: Equatable {
         max(headerTopInset + headerRowHeight / 2,
             menuBarHeight + 6 + NotchQuickAccessLayout.diameter / 2)
     }
-    /// One row beside the camera, reaching the menu bar's bottom edge.
-    /// A physical camera sets the minimum height; fits adjust the coverage.
+    /// One row beside the camera, including menu-bar coverage when enabled.
     var stripHeight: CGFloat { cameraHeight }
     /// What a strip shows inside: all of it, or the capsule within its margins.
     var stripBodyHeight: CGFloat { max(0, stripHeight - (floatingGap ?? 0) * 2) }
@@ -1892,8 +1897,8 @@ struct NotchGeometry: Equatable {
         let capsule = max(NotchLayout.capsuleRestingAspect * stripBodyHeight + capsuleWidthFit, stripBodyHeight * 2)
         return CGSize(width: min(cameraWidth, (capsule + shoulders).rounded()), height: cameraHeight)
     }
-    /// Full screen and the Lock Screen draw no outline, so their black cutout
-    /// keeps to the camera instead of showing the outline's room below it.
+    /// Full screen and the Lock Screen remove outline clearance while keeping
+    /// the chosen menu-bar coverage and manual fit.
     var bareCutout: CGSize {
         let resting = restingSize(showsContent: false)
         return CGSize(width: max(0, resting.width - outlineRoom * 2), height: max(0, resting.height - outlineRoom))

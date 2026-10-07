@@ -99,9 +99,21 @@ struct NotchSettings: View {
     private var editor: NotchEditorStrings { FeatureStrings.notchEditor(l10n.language) }
 
     private var configuration: [String] {
-        [String(enabled), String(calendarEnabled), String(calendarCountdown), String(calendarTimeLeft), String(notificationsEnabled), String(dismissNativeNotifications), String(gesturesEnabled), String(lyricsEnabled), String(lyricsOnline), String(queueEnabled), String(liveEqualizer), String(showPlayingMusic), String(includeOtherPlayers), idle, hiddenControls, controlOrder, size,
-         String(timerEnabled), String(timerSoundEnabled), String(hideTimerCountdown), String(cameraEnabled), String(accessoriesEnabled), String(outlineEnabled), String(hideMenuBarGap), String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight), String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback), String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel), String(hoverExpand), String(hideUntilHover), String(hideInFullscreen), String(coversMenus), display, silhouette, String(hover), hidden, order, String(volume),
-         String(brightness), String(keyboardLight), String(microphone), String(battery), String(clipboard), String(clipboardWindow), String(capture), String(trackChange), captureAction, String(showInCaptures), String(returnHome), homeModule, String(opensActivity), String(scratchpad), String(agentsEnabled), String(watchEnabled), String(keepAwakeActivity)]
+        [String(enabled), String(calendarEnabled), String(calendarCountdown), String(calendarTimeLeft),
+         String(notificationsEnabled), String(dismissNativeNotifications), String(gesturesEnabled),
+         String(lyricsEnabled), String(lyricsOnline), String(queueEnabled), String(liveEqualizer),
+         String(showPlayingMusic), String(includeOtherPlayers), idle, hiddenControls, controlOrder, size,
+         String(timerEnabled), String(timerSoundEnabled), String(hideTimerCountdown),
+         String(cameraEnabled), String(accessoriesEnabled), String(outlineEnabled), String(hideMenuBarGap),
+         String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
+         String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
+         String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
+         String(hoverExpand), String(hideUntilHover), String(hideInFullscreen), String(coversMenus),
+         display, silhouette, String(hover), hidden, order, String(volume), String(brightness), String(keyboardLight),
+         String(microphone), String(battery), String(clipboard), String(clipboardWindow),
+         String(capture), String(trackChange), captureAction, String(showInCaptures),
+         String(returnHome), homeModule, String(opensActivity), String(scratchpad),
+         String(agentsEnabled), String(watchEnabled), String(keepAwakeActivity)]
     }
 
     private var access: Binding<NotchQuickAccessConfiguration> {
