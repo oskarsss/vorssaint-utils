@@ -39,13 +39,16 @@ Quit Protection regardless of event-tap installation order.
 
 ## Suggested remaps
 
-Choose and preview a focused preset rather than installing one combined setup:
+Choose and preview a focused preset rather than installing one combined setup.
+Previews show a From → To table with full key names (Home, End, Left Arrow,
+Command, Shift) instead of compact, ambiguous shortcut symbols:
 
 | Preset | Rules | Use case |
 | --- | --- | --- |
 | Caps Lock → Escape | Caps Lock sends Escape | Vim and editors; replaces normal Caps Lock |
 | Caps Lock → Control | Caps Lock becomes left Control | Terminal and Control-heavy shortcuts; replaces normal Caps Lock |
 | PC-style Home / End | Home/End send Command+Left/Right; Shift selects | Familiar line navigation on full-size keyboards; app support varies |
+| Safer quitting | Command+Q → do nothing; Option+Q → Command+Q | Reduce accidental quitting near Command+Tab; replaces the Option+Q character |
 | Fn and languages | Fn → left Command; Caps Lock → next language; Shift+Caps Lock → normal Caps Lock | Optional example for multilingual Mac users |
 
 Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
@@ -59,8 +62,10 @@ To replace an existing Caps Lock choice, edit or remove that rule first; adding
 another preset does not overwrite it. Previewing or cancelling a preset does
 not change the active setup or enable remapping.
 
-Quitting and application shortcuts are personal choices, configured in the
-shortcut editor. No preset takes over Option+Q, Option+T, or right Command.
+Safer quitting is a separate, explicit choice rather than part of another
+preset. Its preview shows Command+Q → do nothing and Option+Q → Command+Q.
+All other presets leave quitting alone. Application shortcuts remain personal
+choices in the shortcut editor. No preset takes over Option+T or right Command.
 In particular, right Command → right Option remains a separate choice for
 layouts such as Latvian that use Option for alternative characters.
 

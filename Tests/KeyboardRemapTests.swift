@@ -163,8 +163,8 @@ enum KeyboardRemapTests {
             let suggestion = preset.configuration
             suite.expect(suggestion.validationKey == nil, "Every preset is independently valid: \(preset.id)")
             suite.expect(!suggestion.keyRules.contains { $0.source == "rightCommand" }, "No preset includes a Latvian-specific right Command rule")
-            suite.expect(!suggestion.shortcutRules.contains { $0.source.character == "q" || $0.source.character == "t" },
-                         "Preset examples do not take over quitting or Terminal shortcuts")
+            suite.expect(preset == .saferQuit || !suggestion.shortcutRules.contains { $0.source.character == "q" || $0.source.character == "t" },
+                         "Only the explicit safer-quitting preset changes quitting shortcuts")
             for language in AppLanguage.allCases {
                 suite.expect(KeyboardRemapStrings.text(preset.titleKey, language: language) != preset.titleKey
                     && KeyboardRemapStrings.text(preset.noteKey, language: language) != preset.noteKey,
@@ -185,6 +185,16 @@ enum KeyboardRemapTests {
         _ = state.decide(key: Int64(kVK_Home), down: false, repeatKey: false, flags: [], commandLabel: nil, config: navigation)
         suite.expect(state.decide(key: Int64(kVK_End), down: true, repeatKey: false, flags: .maskShift, commandLabel: nil, config: navigation)
                      == .key(Int64(kVK_RightArrow), [.maskCommand, .maskShift]), "Shift-End preset selects to line end")
+        let safeQuit = KeyboardRemapPreset.saferQuit.configuration
+        state.reset()
+        suite.expect(state.decide(key: 12, down: true, repeatKey: false, flags: .maskCommand, commandLabel: "q", config: safeQuit) == .swallow,
+                     "Safer quitting blocks Command-Q")
+        _ = state.decide(key: 12, down: false, repeatKey: false, flags: [], commandLabel: "q", config: safeQuit)
+        suite.expect(state.decide(key: 12, down: true, repeatKey: false, flags: .maskAlternate, commandLabel: "q", config: safeQuit) == .key(12, .maskCommand),
+                     "Safer quitting sends Command-Q from Option-Q")
+        suite.expect(KeyboardRemapChord(Int64(kVK_Home)).readableLabel == "Home", "Preview spells out Home instead of its arrow glyph")
+        suite.expect(KeyboardRemapChord(Int64(kVK_LeftArrow), [.command, .shift]).readableLabel == "Shift + Command + Left Arrow",
+                     "Preview spells out shortcut names with separators")
         let savedDomain = "vorss.tests.keyboard-remap.\(UUID().uuidString)"
         if let defaults = UserDefaults(suiteName: savedDomain) {
             defer { defaults.removePersistentDomain(forName: savedDomain) }

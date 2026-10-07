@@ -20,6 +20,19 @@ struct KeyboardRemapKey: Identifiable, Equatable {
         }
         return label
     }
+    var readableLabel: String {
+        switch id {
+        case "home": return KeyboardRemapStrings.text("homeKey")
+        case "end": return KeyboardRemapStrings.text("endKey")
+        case "leftArrow": return KeyboardRemapStrings.text("leftArrowKey")
+        case "rightArrow": return KeyboardRemapStrings.text("rightArrowKey")
+        case "leftCommand", "rightCommand", "leftControl", "rightControl", "leftOption", "rightOption", "leftShift", "rightShift":
+            let side = id.hasPrefix("left") ? "left" : "right"
+            let name = String(id.dropFirst(side.count)).lowercased() + "Key"
+            return KeyboardRemapStrings.text(side) + " " + KeyboardRemapStrings.text(name)
+        default: return displayLabel
+        }
+    }
     var isModifier: Bool { (0x7000000E0...0x7000000E7).contains(usage) || id == "fn" }
     static func named(_ id: String) -> Self? { all.first { $0.id == id } }
     static func at(_ code: Int64) -> Self? { all.first { $0.code == code } }
@@ -87,6 +100,16 @@ struct KeyboardRemapChord: Codable, Equatable {
             return shortcut.modifiers.keyCaps.joined() + key.displayLabel
         }
         return shortcut.displayString
+    }
+    /// Plain key names for previews, avoiding ambiguous Home/End/arrow glyphs.
+    var readableLabel: String {
+        let modifiers = shortcut.modifiers
+        var parts: [String] = []
+        for (flag, name): (GlobalShortcutModifiers, String) in [(.control, "controlKey"), (.option, "optionKey"), (.shift, "shiftKey"), (.command, "commandKey")] {
+            if modifiers.contains(flag) { parts.append(KeyboardRemapStrings.text(name)) }
+        }
+        parts.append(character?.uppercased() ?? KeyboardRemapKey.at(keyCode)?.readableLabel ?? label)
+        return parts.joined(separator: " + ")
     }
     func matches(key: Int64, flags: CGEventFlags, commandLabel: String?) -> Bool {
         shortcut.modifiers == GlobalShortcutModifiers(cgFlags: flags)
@@ -275,7 +298,7 @@ struct KeyboardRemapConfiguration: Equatable {
 
 /// Focused alternatives, never installed automatically or combined as a default.
 enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
-    case capsEscape, capsControl, lineNavigation, fnLanguages
+    case capsEscape, capsControl, lineNavigation, saferQuit, fnLanguages
     var id: String { rawValue }
     var titleKey: String { "preset_" + rawValue }
     var noteKey: String { titleKey + "_note" }
@@ -293,6 +316,11 @@ enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
                 result.shortcutRules.append(.init(.init(Int64(kVK_End), modifiers),
                     .shortcut(.init(Int64(kVK_RightArrow), modifiers.union(.command)))))
             }
+        case .saferQuit:
+            result.shortcutRules = [
+                .init(.init(12, .command, character: "q"), .none),
+                .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q")))
+            ]
         case .fnLanguages:
             result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
             result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]

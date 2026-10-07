@@ -164,12 +164,31 @@ struct KeyboardRemapSettings: View {
                 Text(text(selectedPreset.titleKey)).font(.title2)
                 Text(text(selectedPreset.noteKey)).foregroundStyle(.secondary)
                 let suggested = selectedPreset.configuration
-                ForEach(suggested.keyRules) { rule in
-                    LabeledContent(KeyboardRemapKey.named(rule.source)?.displayLabel ?? rule.source, value: KeyboardRemapRuleLabel.target(rule.target))
+                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
+                    GridRow {
+                        Text(text("from")).font(.caption).foregroundStyle(.secondary)
+                        Color.clear.frame(width: 16, height: 1)
+                        Text(text("to")).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Divider().gridCellColumns(3)
+                    ForEach(suggested.keyRules) { rule in
+                        GridRow {
+                            Text(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source)
+                            Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                            Text(KeyboardRemapRuleLabel.previewTarget(rule.target))
+                        }
+                    }
+                    ForEach(suggested.shortcutRules) { rule in
+                        GridRow {
+                            Text(rule.source.readableLabel)
+                            Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                            Text(KeyboardRemapRuleLabel.previewTarget(rule.target))
+                        }
+                    }
                 }
-                ForEach(suggested.shortcutRules) { rule in
-                    LabeledContent(rule.source.label, value: KeyboardRemapRuleLabel.target(rule.target))
-                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(text("cancel")) { showSuggestion = false }
@@ -177,12 +196,20 @@ struct KeyboardRemapSettings: View {
                     Button(text("addSuggestion")) { var next = config; next.addSuggestion(selectedPreset); save(next); showSuggestion = false }
                         .keyboardShortcut(.defaultAction)
                 }
-            }.padding(24).frame(width: 500)
+            }.padding(24).frame(width: 560)
         }
     }
 }
 
 private enum KeyboardRemapRuleLabel {
+    static func previewTarget(_ target: KeyboardRemapTarget) -> String {
+        switch target {
+        case .key(let id): return KeyboardRemapKey.named(id)?.readableLabel ?? id
+        case .shortcut(let chord): return chord.readableLabel
+        default: return self.target(target)
+        }
+    }
+
     static func target(_ target: KeyboardRemapTarget) -> String {
         if case .application(let id) = target {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
