@@ -159,37 +159,60 @@ struct KeyboardRemapSettings: View {
             }
         }
         .sheet(item: $selectedPreset) { preset in
-            VStack(alignment: .leading, spacing: 16) {
-                Text(text(preset.titleKey)).font(.title2)
-                Text(text(preset.noteKey)).foregroundStyle(.secondary)
-                let suggested = preset.configuration
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
-                    GridRow {
-                        Text(text("from")).font(.caption).foregroundStyle(.secondary)
-                        Color.clear.frame(width: 16, height: 1)
-                        Text(text("to")).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Divider().gridCellColumns(3)
-                    ForEach(suggested.keyRules) { rule in
-                        previewRow(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source, target: rule.target)
-                    }
-                    ForEach(suggested.shortcutRules) { rule in
-                        previewRow(rule.source.readableLabel, target: rule.target)
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-                Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button(text("cancel")) { selectedPreset = nil }
-                    Spacer()
-                    Button(text("addSuggestion")) { var next = config; next.addSuggestion(preset); save(next); selectedPreset = nil }
-                        .keyboardShortcut(.defaultAction)
-                }
-            }.padding(24).frame(width: 560)
+            KeyboardRemapPresetPreview(preset: preset) {
+                var next = config
+                next.addSuggestion(preset)
+                save(next)
+            }
         }
     }
+}
+
+private struct KeyboardRemapPresetPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var l10n = L10n.shared
+    let preset: KeyboardRemapPreset
+    let onAdd: () -> Void
+
+    private func text(_ key: String) -> String {
+        KeyboardRemapStrings.text(key, language: l10n.language)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(text(preset.titleKey)).font(.title2)
+            Text(text(preset.noteKey)).foregroundStyle(.secondary)
+            let suggested = preset.configuration
+            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
+                GridRow {
+                    Text(text("from")).font(.caption).foregroundStyle(.secondary)
+                    Color.clear.frame(width: 16, height: 1)
+                    Text(text("to")).font(.caption).foregroundStyle(.secondary)
+                }
+                Divider().gridCellColumns(3)
+                ForEach(suggested.keyRules) { rule in
+                    previewRow(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source, target: rule.target)
+                }
+                ForEach(suggested.shortcutRules) { rule in
+                    previewRow(rule.source.readableLabel, target: rule.target)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+            Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button(text("cancel")) { dismiss() }
+                Spacer()
+                Button(text("addSuggestion")) {
+                    onAdd()
+                    dismiss()
+                }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }.padding(24).frame(width: 560)
+    }
+
     private func previewRow(_ source: String, target: KeyboardRemapTarget) -> some View {
         GridRow {
             Text(source)

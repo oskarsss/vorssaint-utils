@@ -145,20 +145,16 @@ final class KeyboardRemapService: ObservableObject {
         }
         guard isRunning, !OwnKeyEvent.isPosted(event) else { return Unmanaged.passUnretained(event) }
         let key = event.getIntegerValueField(.keyboardEventKeycode)
-        // A hot-plugged keyboard can arrive without the HID table. Its first
-        // raw source event schedules a repair, never a subprocess inside a tap.
-        if type == .flagsChanged {
-            if config.mappings.contains(where: { mapping in
-                KeyboardRemapKey.all.contains { $0.code == key && $0.usage == mapping.source }
-            }) {
-                scheduleRepair()
-            }
+        guard type == .flagsChanged || type == .keyDown || type == .keyUp else {
             return Unmanaged.passUnretained(event)
         }
-        guard type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
-        if type == .keyDown, config.mappings.contains(where: { mapping in
-            KeyboardRemapKey.all.contains { $0.code == key && $0.usage == mapping.source }
-        }) { scheduleRepair() }
+        // A hot-plugged keyboard can arrive without the HID table. Its first
+        // raw source event schedules a repair, never a subprocess inside a tap.
+        if type != .keyUp, let physicalKey = KeyboardRemapKey.at(key),
+           config.mappings.contains(where: { $0.source == physicalKey.usage }) {
+            scheduleRepair()
+        }
+        guard type != .flagsChanged else { return Unmanaged.passUnretained(event) }
         let label = GlobalShortcut.layoutKeyLabel(for: key, usesCommand: true)?.lowercased()
         let action = state.decide(key: key, down: type == .keyDown,
                                   repeatKey: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
