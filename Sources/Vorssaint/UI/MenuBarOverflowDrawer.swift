@@ -8,10 +8,21 @@ struct MenuBarOverflowDrawer: View {
     @ObservedObject var controller: MenuBarOverflowController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Icon Drawer")
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.top, 2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Icon Drawer")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Button { controller.chooseIcons() } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Choose icons…")
+                .accessibilityLabel("Choose icons for Icon Drawer")
+            }
             Divider()
             if controller.isBusy {
                 VStack(spacing: 8) {
@@ -29,7 +40,7 @@ struct MenuBarOverflowDrawer: View {
             } else if !controller.items.isEmpty {
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4),
-                                             count: controller.items.count > 9 ? 4 : 3), spacing: 6) {
+                                             count: controller.items.count > 9 ? 4 : 3), spacing: 4) {
                         ForEach(controller.items) { item in
                             MenuBarOverflowIcon(item: item) { controller.open(item) }
                         }
@@ -41,21 +52,12 @@ struct MenuBarOverflowDrawer: View {
                     Text("Your less-used icons go here.").font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity)
             }
-            Divider()
-            Button { controller.chooseIcons() } label: {
-                Text("Choose Icons…")
-                    .font(.system(size: 13))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-                .accessibilityLabel("Choose icons for Icon Drawer")
             if let message = controller.message, AXIsProcessTrusted() {
                 Text(message).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
+        .padding(12)
     }
 }
 
@@ -66,11 +68,11 @@ private struct MenuBarOverflowIcon: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                Image(nsImage: item.icon).resizable().scaledToFit().frame(width: 28, height: 28)
+            VStack(spacing: 4) {
+                Image(nsImage: item.icon).resizable().scaledToFit().frame(width: 24, height: 24)
                 Text(item.name).font(.system(size: 11)).lineLimit(1)
             }
-            .frame(maxWidth: .infinity).frame(height: 66)
+            .frame(maxWidth: .infinity).frame(height: 54)
             .background(hovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
         }

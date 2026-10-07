@@ -368,9 +368,9 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     private func presentDrawer() {
         guard toggleItem != nil else { return }
         let columns = items.count > 9 ? 4 : 3
-        let width = CGFloat(columns) * 88 + 28
+        let width = CGFloat(columns) * 80 + 24
         let rows = max(1, Int(ceil(Double(items.count) / Double(columns))))
-        let height = min(360, max(150, CGFloat(rows) * 72 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 110 : 166)))
+        let height = min(360, max(150, CGFloat(rows) * 58 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 84 : 126)))
         let point = lastClickPoint
         let screen = point.flatMap { point in NSScreen.screens.first { $0.frame.contains(point) } }
             ?? toggleItem?.button?.window?.screen ?? NSScreen.main
@@ -398,6 +398,9 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let hosting = NSHostingView(rootView: MenuBarOverflowDrawer(controller: self))
             hosting.frame = CGRect(origin: .zero, size: frame.size)
+            // The controller sizes the grid; intrinsic SwiftUI sizing must not
+            // shrink the glass content to a single scroll-view row.
+            hosting.sizingOptions = []
             hosting.autoresizingMask = [.width, .height]
             // Clip hosted content as well as the glass: NSGlassEffectView does
             // not mask arbitrary content backing layers to its rounded shape.
