@@ -15,6 +15,7 @@ struct KeyboardRemapSettings: View {
     @State private var editingKey: KeyboardRemapKeyRule?
     @State private var editingShortcut: KeyboardRemapShortcutRule?
     @State private var showSuggestion = false
+    @State private var selectedPreset: KeyboardRemapPreset = .capsEscape
 
     private func text(_ key: String) -> String { KeyboardRemapStrings.text(key, language: l10n.language) }
     private var config: KeyboardRemapConfiguration {
@@ -99,7 +100,17 @@ struct KeyboardRemapSettings: View {
             }
             Section(text("suggestion")) {
                 Text(text("suggestionNote")).font(.caption).foregroundStyle(.secondary)
-                Button(text("viewSuggestion")) { showSuggestion = true }
+                ForEach(KeyboardRemapPreset.allCases) { preset in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(text(preset.titleKey))
+                            Text(text(preset.noteKey)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(text("viewSuggestion")) { selectedPreset = preset; showSuggestion = true }
+                            .accessibilityLabel(text("viewSuggestion") + " " + text(preset.titleKey))
+                    }
+                }
             }
             Section(text("preview")) {
                 if config.isEmpty { Text(text("emptyRules")).foregroundStyle(.secondary) }
@@ -150,9 +161,9 @@ struct KeyboardRemapSettings: View {
         }
         .sheet(isPresented: $showSuggestion) {
             VStack(alignment: .leading, spacing: 16) {
-                Text(text("suggestion")).font(.title2)
-                Text(text("suggestionNote")).foregroundStyle(.secondary)
-                let suggested = KeyboardRemapConfiguration.comfortableMac
+                Text(text(selectedPreset.titleKey)).font(.title2)
+                Text(text(selectedPreset.noteKey)).foregroundStyle(.secondary)
+                let suggested = selectedPreset.configuration
                 ForEach(suggested.keyRules) { rule in
                     LabeledContent(KeyboardRemapKey.named(rule.source)?.displayLabel ?? rule.source, value: KeyboardRemapRuleLabel.target(rule.target))
                 }
@@ -163,7 +174,7 @@ struct KeyboardRemapSettings: View {
                 HStack {
                     Button(text("cancel")) { showSuggestion = false }
                     Spacer()
-                    Button(text("addSuggestion")) { var next = config; next.addSuggestion(); save(next); showSuggestion = false }
+                    Button(text("addSuggestion")) { var next = config; next.addSuggestion(selectedPreset); save(next); showSuggestion = false }
                         .keyboardShortcut(.defaultAction)
                 }
             }.padding(24).frame(width: 500)

@@ -38,7 +38,7 @@ enum KeyboardRemapTapTests {
     class Fixture {
         var statusKey: String?
         var isRunning = true
-        var config = KeyboardRemapConfiguration.comfortableMac
+        var config = KeyboardRemapTests.fullConfiguration
         var state = KeyboardRemapSupport.State()
         let translatedSource = CGEventSource(stateID: .hidSystemState)
         var tap: CFMachPort?

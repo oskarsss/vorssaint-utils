@@ -37,31 +37,36 @@ released early, and action repeats are suppressed. Outputs bypass Vorssaint's
 Quit Protection confirmation. A rule claiming Command+Q takes precedence over
 Quit Protection regardless of event-tap installation order.
 
-## One suggested setup
+## Suggested remaps
 
-**Suggested setup: comfortable Mac** is optional. Its preview offers:
+Choose and preview a focused preset rather than installing one combined setup:
 
-| Key | Result |
-| --- | --- |
-| Fn / Globe | Left Command |
-| Caps Lock | Cycle input languages |
-| Shift + Caps Lock | Toggle normal Caps Lock |
-| Command + Q | Do nothing |
-| Option + Q | Send Command + Q to quit |
-| Option + T | Open Terminal |
+| Preset | Rules | Use case |
+| --- | --- | --- |
+| Caps Lock → Escape | Caps Lock sends Escape | Vim and editors; replaces normal Caps Lock |
+| Caps Lock → Control | Caps Lock becomes left Control | Terminal and Control-heavy shortcuts; replaces normal Caps Lock |
+| PC-style Home / End | Home/End send Command+Left/Right; Shift selects | Familiar line navigation on full-size keyboards; app support varies |
+| Fn and languages | Fn → left Command; Caps Lock → next language; Shift+Caps Lock → normal Caps Lock | Optional example for multilingual Mac users |
 
-Right Command → Right Option is a separate personal choice for layouts such as
-Latvian that use Option for alternative characters. It is not in this suggestion.
+Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
+not tap-versus-hold behavior. Home/End normally scroll to document boundaries
+on macOS; this preset changes them to line movement. Existing Control/Option
+combinations remain available. The Fn preset changes the usual Fn behavior.
 
 **Add suggested rules** adds missing sources only. Existing custom rules and
 explicitly disabled choices stay intact. Repeated use does not duplicate rules.
-A different existing Caps Lock key mapping is preserved along with its meaning;
-the suggestion does not add a conflicting Shift+Caps Lock rule.
+To replace an existing Caps Lock choice, edit or remove that rule first; adding
+another preset does not overwrite it. Previewing or cancelling a preset does
+not change the active setup or enable remapping.
 
-Q/T in this suggestion follow the input layout's Command table, so Q retains
-its shortcut meaning across supported layouts. Recording or selecting a new
-source replaces that logical match with the chosen physical key code. Remaps
-that use Option combinations replace the characters those combinations type.
+Quitting and application shortcuts are personal choices, configured in the
+shortcut editor. No preset takes over Option+Q, Option+T, or right Command.
+In particular, right Command → right Option remains a separate choice for
+layouts such as Latvian that use Option for alternative characters.
+
+Recorded or manually selected shortcuts match physical key codes. Existing
+logical Q/T rules from an earlier suggested setup remain supported. Option
+shortcuts replace any characters those combinations normally type.
 Windows/Linux need separate configuration; Vorssaint changes macOS only.
 
 A fresh install receives no suggested rules automatically.
@@ -99,3 +104,5 @@ Rule choices participate in settings backup; mapping ownership does not.
 - [Apple's HID key mapping technical note](https://developer.apple.com/library/archive/technotes/tn2450/)
 - [Apple's Mac shortcut reference](https://support.apple.com/en-us/102650)
 - [Karabiner's examples and Fn limitations](https://karabiner-elements.pqrs.org/docs/getting-started/features/)
+
+Caps Lock examples are documented in [Karabiner’s typical modifications](https://karabiner-elements.pqrs.org/docs/json/typical-complex-modifications-examples/); native line and document shortcuts are listed in [Apple’s shortcut reference](https://support.apple.com/en-us/102650).

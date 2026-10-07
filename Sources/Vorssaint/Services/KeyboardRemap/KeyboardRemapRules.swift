@@ -159,19 +159,6 @@ struct KeyboardRemapConfiguration: Equatable {
         defaults.set(Self.encode(shortcutRules), forKey: DefaultsKey.keyboardRemapShortcutRules)
     }
 
-    /// A suggestion, deliberately separate from the empty initial configuration.
-    static var comfortableMac: Self {
-        var result = Self()
-        result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
-        result.shortcutRules = [
-            .init(.init(Int64(kVK_CapsLock), .shift), .capsLock),
-            .init(.init(12, .command, character: "q"), .none),
-            .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q"))),
-            .init(.init(17, .option, character: "t"), .application("com.apple.Terminal")),
-        ]
-        return result
-    }
-
     /// Virtual triggers make lock/modifier keys usable for actions. F18 stays
     /// reserved for Super Key. Trigger assignment is deterministic per config.
     static let triggerKeys = ["f19", "f20", "f17", "f16", "f15", "f14", "f13"].compactMap(KeyboardRemapKey.named)
@@ -268,8 +255,8 @@ struct KeyboardRemapConfiguration: Equatable {
     var isEmpty: Bool { !keyRules.contains(where: \.enabled) && !shortcutRules.contains(where: \.enabled) }
 
     /// Append only missing suggestions, preserving every custom rule and choice.
-    mutating func addSuggestion() {
-        let suggestion = Self.comfortableMac
+    mutating func addSuggestion(_ preset: KeyboardRemapPreset) {
+        let suggestion = preset.configuration
         for rule in suggestion.keyRules where !keyRules.contains(where: { $0.source == rule.source }) { keyRules.append(rule) }
         for rule in suggestion.shortcutRules where !shortcutRules.contains(where: { Self.overlap($0.source, rule.source) }) {
             if rule.source.keyCode == Int64(kVK_CapsLock),
@@ -284,4 +271,32 @@ struct KeyboardRemapConfiguration: Equatable {
             || (first.character != nil && first.character == second.character))
     }
 
+}
+
+/// Focused alternatives, never installed automatically or combined as a default.
+enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
+    case capsEscape, capsControl, lineNavigation, fnLanguages
+    var id: String { rawValue }
+    var titleKey: String { "preset_" + rawValue }
+    var noteKey: String { titleKey + "_note" }
+    var configuration: KeyboardRemapConfiguration {
+        var result = KeyboardRemapConfiguration()
+        switch self {
+        case .capsEscape:
+            result.keyRules = [.init("capsLock", .key("escape"))]
+        case .capsControl:
+            result.keyRules = [.init("capsLock", .key("leftControl"))]
+        case .lineNavigation:
+            for modifiers: GlobalShortcutModifiers in [[], .shift] {
+                result.shortcutRules.append(.init(.init(Int64(kVK_Home), modifiers),
+                    .shortcut(.init(Int64(kVK_LeftArrow), modifiers.union(.command)))))
+                result.shortcutRules.append(.init(.init(Int64(kVK_End), modifiers),
+                    .shortcut(.init(Int64(kVK_RightArrow), modifiers.union(.command)))))
+            }
+        case .fnLanguages:
+            result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
+            result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]
+        }
+        return result
+    }
 }

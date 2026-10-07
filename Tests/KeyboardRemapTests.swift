@@ -6,6 +6,16 @@ import CoreGraphics
 import Foundation
 
 enum KeyboardRemapTests {
+    static var fullConfiguration: KeyboardRemapConfiguration {
+        var config = KeyboardRemapPreset.fnLanguages.configuration
+        config.shortcutRules += [
+            .init(.init(12, .command, character: "q"), .none),
+            .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q"))),
+            .init(.init(17, .option, character: "t"), .application("com.apple.Terminal"))
+        ]
+        return config
+    }
+
     static func run(_ suite: TestSuite) {
         for language in AppLanguage.allCases {
             suite.expect(KeyboardRemapStrings.isComplete(for: language), "Keyboard remap strings cover \(language.rawValue)")
@@ -23,7 +33,7 @@ enum KeyboardRemapTests {
         } else { suite.expect(false, "Keyboard remap test preference domain opens") }
         var state = KeyboardRemapSupport.State()
         suite.expect(KeyboardRemapConfiguration().isEmpty, "Fresh configurations start without remaps")
-        var config = KeyboardRemapConfiguration.comfortableMac
+        var config = fullConfiguration
         func key(_ code: Int64, _ flags: CGEventFlags = [], down: Bool = true, repeatKey: Bool = false) -> KeyboardRemapSupport.Action {
             state.decide(key: code, down: down, repeatKey: repeatKey, flags: flags,
                          commandLabel: code == 12 ? "q" : (code == 17 ? "t" : nil), config: config)
@@ -47,15 +57,15 @@ enum KeyboardRemapTests {
         _ = key(caps, [], down: false)
         suite.expect(key(caps, .maskAlphaShift) == .inputSource, "Language switch still works with Caps Lock on")
         _ = key(caps, [], down: false)
-        suite.expect(key(Int64(kVK_Home)) == .pass, "Home-End extra is off in recommended preset")
+        suite.expect(key(Int64(kVK_Home)) == .pass, "Home-End is unchanged before adding a navigation rule")
         config.shortcutRules.append(.init(.init(Int64(kVK_Home), .shift), .shortcut(.init(Int64(kVK_LeftArrow), [.shift, .command]))))
         suite.expect(key(Int64(kVK_Home), .maskShift) == .key(Int64(kVK_LeftArrow), [.maskShift, .maskCommand]), "Shift-Home selects to line start")
         suite.expect(key(Int64(kVK_Home), [], down: false) == .key(Int64(kVK_LeftArrow), [.maskShift, .maskCommand]), "Home release matches translated down")
         suite.expect(key(Int64(kVK_End), .maskControl) == .pass, "Control-End is unchanged")
         config.shortcutRules.removeAll { $0.source.character == "q" && $0.source.modifiers == GlobalShortcutModifiers.command.rawValue }
         suite.expect(key(12, .maskCommand) == .pass, "Disabling safe quit restores Command-Q")
-        suite.expect(!KeyboardRemapConfiguration.comfortableMac.keyRules.contains { $0.source == "rightCommand" },
-                     "Latvian right Command mapping is not a general suggestion")
+        suite.expect(!fullConfiguration.keyRules.contains { $0.source == "rightCommand" },
+                     "Custom routing fixture does not require a right Command mapping")
         let mappings = config.mappings
         let fn = KeyboardRemapKey.named("fn")!.usage
         let capsUsage = KeyboardRemapKey.named("capsLock")!.usage
@@ -67,7 +77,7 @@ enum KeyboardRemapTests {
                      "Alternative Apple Fn usage is normalized for conflict detection")
         suite.expect(!KeyboardRemapSupport.hasModifierConflict([[.init(source: fn, destination: fn), .init(source: 0x7000000E4, destination: 0x7000000E6)]], wanted: mappings),
                      "Identity and unrelated macOS modifier mappings remain supported")
-        suite.expect(mappings.count == 2, "Suggested preset has two HID mappings")
+        suite.expect(mappings.count == 2, "Routing fixture uses two HID mappings")
         suite.expect(KeyboardRemapSupport.storedMappings(KeyboardRemapSupport.storage(mappings)) == mappings,
                      "Recovery marker round trips every exact mapping")
         let foreign = SuperKeyMapping(source: 0x700000004, destination: 0x700000005)
@@ -116,20 +126,20 @@ enum KeyboardRemapTests {
         let encodedShortcuts = KeyboardRemapConfiguration.encode(generic.shortcutRules)
         let decodedShortcuts: [KeyboardRemapShortcutRule]? = KeyboardRemapConfiguration.decode(encodedShortcuts)
         suite.expect(decodedShortcuts == generic.shortcutRules, "Shortcut rules, apps, and enabled choices round trip")
-        generic.addSuggestion()
+        generic.addSuggestion(.fnLanguages)
         suite.expect(generic.keyRules.first?.source == "rightOption", "Suggestion preserves custom key ordering")
         let count = generic.keyRules.count + generic.shortcutRules.count
-        generic.addSuggestion()
+        generic.addSuggestion(.fnLanguages)
         suite.expect(generic.keyRules.count + generic.shortcutRules.count == count, "Adding suggestion twice does not duplicate rules")
         var customized = KeyboardRemapConfiguration()
         customized.keyRules = [.init("fn", .key("leftControl")), .init("capsLock", .key("escape"))]
         var customQuit = KeyboardRemapShortcutRule(.init(12, .command), .shortcut(.init(53)))
         customQuit.enabled = false
         customized.shortcutRules = [customQuit]
-        customized.addSuggestion()
+        customized.addSuggestion(.fnLanguages)
         suite.expect(customized.keyRules.first?.target == .key("leftControl"), "Suggestion does not replace a different Fn destination")
         suite.expect(customized.shortcutRules.first == customQuit, "Suggestion preserves disabled choices")
-        suite.expect(customized.shortcutRules.filter { $0.source.keyCode == 12 && $0.source.modifiers == GlobalShortcutModifiers.command.rawValue }.count == 1, "Logical suggested Q does not duplicate a recorded Q rule")
+        suite.expect(customized.shortcutRules.filter { $0.source.keyCode == 12 && $0.source.modifiers == GlobalShortcutModifiers.command.rawValue }.count == 1, "Adding a preset leaves custom quitting rules untouched")
         suite.expect(customized.validationKey == nil, "Suggestion respects existing Caps-to-Escape mapping")
         var capsOnly = KeyboardRemapConfiguration()
         capsOnly.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .inputSource)]
@@ -149,6 +159,32 @@ enum KeyboardRemapTests {
         functionAction.keyRules = KeyboardRemapConfiguration.triggerKeys.map { .init($0.id, .key("escape")) }
         functionAction.keyRules.append(.init("capsLock", .inputSource))
         suite.expect(functionAction.validationKey == "reservedKey", "No available internal trigger is refused before changing keys")
+        for preset in KeyboardRemapPreset.allCases {
+            let suggestion = preset.configuration
+            suite.expect(suggestion.validationKey == nil, "Every preset is independently valid: \(preset.id)")
+            suite.expect(!suggestion.keyRules.contains { $0.source == "rightCommand" }, "No preset includes a Latvian-specific right Command rule")
+            suite.expect(!suggestion.shortcutRules.contains { $0.source.character == "q" || $0.source.character == "t" },
+                         "Preset examples do not take over quitting or Terminal shortcuts")
+            for language in AppLanguage.allCases {
+                suite.expect(KeyboardRemapStrings.text(preset.titleKey, language: language) != preset.titleKey
+                    && KeyboardRemapStrings.text(preset.noteKey, language: language) != preset.noteKey,
+                    "Every preset has localized name and explanation")
+            }
+            var merged = KeyboardRemapConfiguration()
+            merged.addSuggestion(preset)
+            let first = merged
+            merged.addSuggestion(preset)
+            suite.expect(merged == first, "Every preset preserves IDs and ordering on repeated additions")
+        }
+        suite.expect(KeyboardRemapPreset.capsEscape.configuration.keyRules.first?.target == .key("escape"), "Editor preset moves Escape to Caps Lock")
+        suite.expect(KeyboardRemapPreset.capsControl.configuration.keyRules.first?.target == .key("leftControl"), "Terminal preset moves Control to Caps Lock")
+        let navigation = KeyboardRemapPreset.lineNavigation.configuration
+        state.reset()
+        suite.expect(state.decide(key: Int64(kVK_Home), down: true, repeatKey: false, flags: [], commandLabel: nil, config: navigation)
+                     == .key(Int64(kVK_LeftArrow), .maskCommand), "Home preset moves to line start")
+        _ = state.decide(key: Int64(kVK_Home), down: false, repeatKey: false, flags: [], commandLabel: nil, config: navigation)
+        suite.expect(state.decide(key: Int64(kVK_End), down: true, repeatKey: false, flags: .maskShift, commandLabel: nil, config: navigation)
+                     == .key(Int64(kVK_RightArrow), [.maskCommand, .maskShift]), "Shift-End preset selects to line end")
         let savedDomain = "vorss.tests.keyboard-remap.\(UUID().uuidString)"
         if let defaults = UserDefaults(suiteName: savedDomain) {
             defer { defaults.removePersistentDomain(forName: savedDomain) }
