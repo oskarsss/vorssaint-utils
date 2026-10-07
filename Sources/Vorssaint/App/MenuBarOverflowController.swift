@@ -282,10 +282,6 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         }) {
             descriptors.append((agent.processIdentifier, "com.apple.MenuBarAgent", "System"))
         }
-        let appIcons = Dictionary(apps.compactMap { app -> (String, NSImage)? in
-            guard let bundle = app.bundleIdentifier, let icon = app.icon else { return nil }
-            return (bundle, icon)
-        }, uniquingKeysWith: { first, _ in first })
         // Checkbox changes need a new allowlist, not a new inventory. Keep the
         // chooser's image objects, identities and row positions intact.
         let cachedInventory = availableItems.map {
@@ -306,6 +302,12 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                     self.arrowAXFrame = arrow.frame
                 }
                 if refreshInventory {
+                    // NSImage belongs to the UI thread. Resolve images here,
+                    // after the background accessibility read has completed.
+                    let appIcons = Dictionary(NSWorkspace.shared.runningApplications.compactMap { app -> (String, NSImage)? in
+                        guard let bundle = app.bundleIdentifier, let icon = app.icon else { return nil }
+                        return (bundle, icon)
+                    }, uniquingKeysWith: { first, _ in first })
                     for record in scannedInventory where record.bundle.hasPrefix("system:") {
                         self.systemCache[record.bundle] = record
                     }
