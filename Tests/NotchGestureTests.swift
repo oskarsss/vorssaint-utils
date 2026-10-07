@@ -51,7 +51,7 @@ enum NotchGestureTests {
         suite.expect(feed(0, -100, expanded: true) == nil,
                "the remainder of an opening gesture cannot immediately close the notch")
         suite.expect(feed(0, 0, ended: true) == nil && feed(0, -80, momentum: true, expanded: true) == nil,
-               "momentum after lifting the fingers never changes presentation")
+               "momentum after a swipe that already acted never changes presentation")
         suite.expect(feed(0, -30, began: true, expanded: true) == .close,
                "a separate upward gesture closes an expanded panel")
         suite.expect(feed(-10, 0, began: true) == nil && feed(-15, 0) == nil && feed(-20, 0) == .nextTrack,
@@ -67,6 +67,61 @@ enum NotchGestureTests {
         suite.expect(feed(0, 0.1, began: true) == nil, "a slow swipe begins below direction slop")
         for _ in 0..<7 { suite.expect(feed(0, 0.5) == nil, "subpoint travel accumulates without firing") }
         suite.expect(feed(0, 21) == .open, "slow travel contributes to the action threshold")
+        suite.expect(feed(0, 15, began: true) == nil && feed(0, 1) == .open,
+               "a short downward swipe opens the island")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 4) == nil && feed(0, 0, ended: true) == nil
+               && feed(0, 8, momentum: true, phased: false) == .open,
+               "the momentum of a quick flick finishes the opening it began")
+        suite.expect(feed(0, 30, momentum: true, phased: false) == nil
+               && feed(0, 0, momentum: true, phased: false) == nil,
+               "a flick opens the island once")
+        suite.expect(feed(0, -6, began: true, expanded: true) == nil && feed(0, 0, ended: true, expanded: true) == nil
+               && feed(0, -12, momentum: true, phased: false, expanded: true) == .close,
+               "the momentum of a quick upward flick closes the island")
+        suite.expect(feed(0, 2, began: true) == nil && feed(0, 0, ended: true) == nil
+               && feed(0, 40, momentum: true, phased: false) == nil,
+               "momentum cannot open the island for a touch that never chose a direction")
+        suite.expect(feed(-15, 0, began: true) == nil && feed(0, 0, ended: true) == nil
+               && feed(-80, 0, momentum: true, phased: false) == nil,
+               "momentum never finishes a track change")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil
+               && feed(0, 40) == nil && feed(0, 40, momentum: true, phased: false) == nil,
+               "a lifted flick cannot resume from a later changed event")
+        // Trackpads and Magic Mouse can send one phaseless event between the
+        // lift and the momentum (see ScrollWheelSupport.isMouseWheel).
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 4) == nil && feed(0, 0, ended: true) == nil
+               && feed(0, 0, phased: false) == nil && feed(0, 8, momentum: true, phased: false) == .open,
+               "a phaseless transition between the lift and the momentum keeps the flick")
+        suite.expect(feed(0, -6, began: true, expanded: true) == nil
+               && feed(0, 0, ended: true, expanded: true) == nil
+               && feed(0, -2, phased: false, expanded: true) == nil
+               && feed(0, -12, momentum: true, phased: false, expanded: true) == .close,
+               "a phaseless transition carrying travel keeps an upward flick")
+        suite.expect(feed(0, 5, began: true) == nil && feed(-30, 1) == nil && feed(0, 0, ended: true) == nil
+               && feed(-120, 12, momentum: true, phased: false) == nil,
+               "the vertical part of a sideways momentum never opens the island")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil,
+               "late momentum fixture lifts a swipe below the threshold")
+        time += 10
+        suite.expect(feed(0, 20, momentum: true, phased: false) == nil,
+               "momentum arriving long after the lift cannot finish an old swipe")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil, "paced momentum fixture")
+        time += 0.29
+        let pacedFirst = feed(0, 4, momentum: true, phased: false)
+        time += 0.29
+        suite.expect(pacedFirst == nil && feed(0, 8, momentum: true, phased: false) == .open,
+               "momentum a third of a second apart still finishes the flick")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil, "paused momentum fixture")
+        time += 0.39
+        suite.expect(feed(0, 20, momentum: true, phased: false) == nil,
+               "momentum that pauses for longer stops the flick")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil, "late transition fixture")
+        time += 0.5
+        suite.expect(feed(0, 0, phased: false) == nil && feed(0, 20, momentum: true, phased: false) == nil,
+               "a phaseless event well after the lift ends the flick")
+        suite.expect(feed(0, 6, began: true) == nil && feed(0, 0, ended: true) == nil
+               && feed(0, 12, precise: false, phased: false) == nil,
+               "a wheel tick after a lifted swipe starts its own sequence instead of finishing the flick")
         suite.expect(feed(0, 5, began: true) == nil && feed(-80, 0) == nil,
                "an established vertical gesture cannot become a track skip")
         suite.expect(feed(-20, 0, began: true) == nil && feed(-19, 0) == nil && feed(-1, 0) == .nextTrack,
@@ -176,6 +231,8 @@ enum NotchGestureTests {
         calendarWheelNavigation(suite)
         calendarVisibleTiles(suite)
         monthDrawing(suite)
+        calendarMonthWeekNumbers(suite)
+        calendarMonthWeekNumberPreference(suite)
         calendarColors(suite)
         for position in [-5000.375, -17.8, -7.1, -0.25, 0, 0.25, 7.1, 17.8, 5000.375] {
             for radius in [4, 14] {
@@ -606,6 +663,19 @@ enum NotchGestureTests {
         waitForCalendar { settlements > 0 && !scroll.scrolling && !scroll.programmatic }
         suite.expect(settlements == 1 && calendar.component(.day, from: selected) == 1,
                      "near-month alignment still settles a real gesture and selects the displayed month")
+        let nearby = calendar.date(byAdding: .month, value: 1, to: selected)!
+        selected = nearby
+        coordinator.update(model(nearby))
+        suite.expect(scroll.programmatic, "nearby navigation starts the animation interrupted by the next selection")
+        let distant = calendar.date(byAdding: .year, value: 2, to: nearby)!
+        selected = distant
+        coordinator.update(model(distant))
+        suite.expect(!scroll.programmatic && calendar.isDate(coordinator.centeredDate, equalTo: distant, toGranularity: .month),
+                     "a distant explicit selection cancels the old animation before rebuilding the document")
+        pumpCalendar(for: 0.35)
+        suite.expect(selected == distant && settlements == 1 && !scroll.programmatic
+                     && calendar.isDate(coordinator.centeredDate, equalTo: distant, toGranularity: .month),
+                     "an interrupted navigation animation cannot move or settle the replacement month's selection")
         coordinator.stop()
         scroll.stop()
     }
@@ -693,33 +763,41 @@ enum NotchGestureTests {
 
     private static func calendarWideMonthLayout(_ suite: TestSuite) {
         let month = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1))!
-        for height: CGFloat in [300, 316, 334, 400] {
-            let view = NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
-                                             height: height - 12, events: [], text: FeatureStrings.notchCalendar(.enUS),
-                                             select: { _ in }, move: { _ in }, today: {}, open: {})
-                .padding(.bottom, 12).frame(width: 196).fixedSize(horizontal: false, vertical: true)
-            let host = NSHostingView(rootView: view)
-            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 196, height: height),
-                                  styleMask: [.borderless], backing: .buffered, defer: true)
-            window.contentView = host
-            host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
-            host.layoutSubtreeIfNeeded()
-            suite.expect(host.fittingSize.height <= height + 0.01,
-                         "the wide month's header, six date rows, footer and padding fit a \(height)-point page")
-            func findCanvas(_ view: NSView) -> CalendarMonthCanvasView? {
-                if let canvas = view as? CalendarMonthCanvasView,
-                   host.bounds.intersects(host.convert(canvas.bounds, from: canvas)) { return canvas }
-                return view.subviews.lazy.compactMap { findCanvas($0) }.first
+        let domain = "com.vorssaint.tests.calendar-week-number-layout"
+        let defaults = UserDefaults(suiteName: domain)!
+        defaults.removePersistentDomain(forName: domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
+        for numbered in [false, true] {
+            defaults.set(numbered, forKey: DefaultsKey.notchCalendarWeekNumbers)
+            for height: CGFloat in [300, 316, 334, 400] {
+                let view = NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
+                                                 height: height - 12, events: [], text: FeatureStrings.notchCalendar(.enUS),
+                                                 select: { _ in }, move: { _ in }, today: {}, open: {})
+                    .defaultAppStorage(defaults)
+                    .padding(.bottom, 12).frame(width: 196).fixedSize(horizontal: false, vertical: true)
+                let host = NSHostingView(rootView: view)
+                let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 196, height: height),
+                                      styleMask: [.borderless], backing: .buffered, defer: true)
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+                host.layoutSubtreeIfNeeded()
+                suite.expect(host.fittingSize.height <= height + 0.01,
+                             "the wide month's header, six date rows, footer and padding fit a \(height)-point page")
+                func findCanvas(_ view: NSView) -> CalendarMonthCanvasView? {
+                    if let canvas = view as? CalendarMonthCanvasView,
+                       host.bounds.intersects(host.convert(canvas.bounds, from: canvas)) { return canvas }
+                    return view.subviews.lazy.compactMap { findCanvas($0) }.first
+                }
+                let canvas = findCanvas(host)
+                let children = canvas?.accessibilityChildren() as? [NSAccessibilityElement] ?? []
+                let bottom = children.last?.accessibilityFrame() ?? .zero
+                var ancestor = canvas?.superview
+                while ancestor != nil && !(ancestor is NSClipView) { ancestor = ancestor?.superview }
+                let viewport = ancestor.map { window.convertToScreen($0.convert($0.bounds, to: nil)) } ?? .zero
+                suite.expect(children.count == (numbered ? 48 : 42) && viewport.contains(bottom) && bottom.height >= 16,
+                             "the sixth month row remains fully inside the native date viewport and tappable at \(height) points (week numbers: \(numbered))")
             }
-            let canvas = findCanvas(host)
-            let children = canvas?.accessibilityChildren() as? [NSAccessibilityElement] ?? []
-            let bottom = children.last?.accessibilityFrame() ?? .zero
-            var ancestor = canvas?.superview
-            while ancestor != nil && !(ancestor is NSClipView) { ancestor = ancestor?.superview }
-            let viewport = ancestor.map { window.convertToScreen($0.convert($0.bounds, to: nil)) } ?? .zero
-            suite.expect(children.count == 42 && viewport.contains(bottom) && bottom.height >= 16,
-                         "the sixth month row remains fully inside the native date viewport and tappable at \(height) points")
         }
     }
 
@@ -834,6 +912,17 @@ enum NotchGestureTests {
         waitForCalendar { !scroll.isCoasting && !scroll.scrolling && settled == 1 }
         suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 1,
                      "the exponential coast reaches rest and settles without a hard cutoff")
+        feed(400, phase: 1, timestamp: 6)
+        feed(0, phase: 4, timestamp: 6.01)
+        suite.expect(scroll.isCoasting && scroll.scrolling,
+                     "the interruption fixture has already scrolled into another month before coasting")
+        feed(0, phase: 1, timestamp: 7)
+        let stopped = scroll.contentView.bounds.minX
+        feed(0, phase: 4, timestamp: 7.2)
+        waitForCalendar { !scroll.scrolling && settled == 2 }
+        suite.expect(!scroll.isCoasting && !scroll.scrolling && settled == 2
+                     && abs(scroll.contentView.bounds.minX - stopped) < 0.001,
+                     "touching and lifting to stop momentum commits the month already reached without further travel")
         coordinator.stop()
         scroll.stop()
     }
@@ -923,6 +1012,107 @@ enum NotchGestureTests {
                      && canvas.date(at: CGPoint(x: 25, y: 8)) == nil
                      && canvas.date(at: CGPoint(x: 25, y: 30)) == days.first,
                      "month gutters do not select dates, while the inset date grid stays tappable")
+    }
+
+    private static func calendarMonthWeekNumbers(_ suite: TestSuite) {
+        let calendar = Calendar.current
+        let month = calendar.date(from: DateComponents(year: 2026, month: 12, day: 1))!
+        let dates = NotchCalendarSupport.monthDays(containing: month)
+        let text = FeatureStrings.notchCalendar(.enUS)
+        for width: CGFloat in [196, 350] {
+            var chosen: Date?
+            let canvas = CalendarMonthCanvasView(frame: CGRect(x: 0, y: 0, width: width, height: 210))
+            let window = NSWindow(contentRect: canvas.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+            window.contentView = canvas
+            var configuration = NotchCalendarMonthCanvas(month: month, selectedDay: month, now: month,
+                                                        events: [], text: text, rowHeight: 28, weekdayHeight: 18,
+                                                        spacing: 4, circle: 24, dotGap: 2, select: { chosen = $0 },
+                                                        horizontalPadding: 20)
+            canvas.configure(configuration, locale: Locale(identifier: "en_US"))
+            let image = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
+            canvas.cacheDisplay(in: canvas.bounds, to: image)
+            let builds = canvas.imageBuildCount
+            configuration.weekNumbers = true
+            canvas.configure(configuration, locale: Locale(identifier: "en_US"))
+            canvas.cacheDisplay(in: canvas.bounds, to: image)
+            let children = canvas.accessibilityChildren() as? [NSAccessibilityElement] ?? []
+            suite.expect(children.count == 48 && canvas.imageBuildCount == builds + 1,
+                         "enabling week numbers rebuilds the cached month and adds six accessible row labels")
+            guard children.count == 48 else { continue }
+            for row in 0..<6 {
+                let week = children[row * 8]
+                let day = children[row * 8 + 1]
+                let localWeek = canvas.convert(window.convertFromScreen(week.accessibilityFrame()), from: nil)
+                let localDay = canvas.convert(window.convertFromScreen(day.accessibilityFrame()), from: nil)
+                suite.expect(week.accessibilityRole() == .staticText
+                             && week.accessibilityLabel() == NotchCalendarSupport.weekNumberLabel(of: dates[row * 7], text: text)
+                             && localWeek.maxX <= localDay.minX,
+                             "each week label precedes its seven dates, names the row's regional week and has no date action")
+                suite.expect(canvas.date(at: CGPoint(x: localWeek.midX, y: localWeek.midY)) == nil
+                             && canvas.date(at: CGPoint(x: localDay.midX, y: localDay.midY)) == dates[row * 7]
+                             && day.accessibilityPerformPress() && chosen == dates[row * 7],
+                             "the numbered gutter stays inert and first-column hit testing and accessibility select the correct day")
+                let last = children[row * 8 + 7]
+                let lastRect = canvas.convert(window.convertFromScreen(last.accessibilityFrame()), from: nil)
+                suite.expect(canvas.date(at: CGPoint(x: lastRect.midX, y: lastRect.midY)) == dates[row * 7 + 6]
+                             && lastRect.maxX <= width - 20 + 0.001,
+                             "the last day column remains inside the month gutter with week numbers enabled")
+            }
+            canvas.configure(configuration, locale: Locale(identifier: "en_US"))
+            canvas.cacheDisplay(in: canvas.bounds, to: image)
+            suite.expect(canvas.imageBuildCount == builds + 1,
+                         "numbered months retain their drawing cache when unchanged")
+            configuration.weekNumbers = false
+            canvas.configure(configuration, locale: Locale(identifier: "en_US"))
+            canvas.cacheDisplay(in: canvas.bounds, to: image)
+            suite.expect(canvas.accessibilityChildren()?.count == 42 && canvas.imageBuildCount == builds + 2
+                         && canvas.date(at: CGPoint(x: 25, y: 30)) == dates.first,
+                         "disabling week numbers removes row labels and restores the full seven-column hit area")
+        }
+    }
+
+    private static func calendarMonthWeekNumberPreference(_ suite: TestSuite) {
+        let domain = "com.vorssaint.tests.calendar-week-number-preference"
+        let defaults = UserDefaults(suiteName: domain)!
+        defaults.removePersistentDomain(forName: domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let month = Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 1))!
+        let text = FeatureStrings.notchCalendar(.enUS)
+        for wide in [true, false] {
+            defaults.set(false, forKey: DefaultsKey.notchCalendarWeekNumbers)
+            let size = CGSize(width: wide ? 196 : 350, height: wide ? 300 : 190)
+            let view: AnyView
+            if wide {
+                view = AnyView(NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
+                                                     height: size.height, events: [], text: text,
+                                                     select: { _ in }, move: { _ in }, today: {}, open: {}))
+            } else {
+                view = AnyView(NotchCalendarMonthGrid(month: month, selectedDay: nil, now: month,
+                                                     height: size.height, events: [], text: text,
+                                                     select: { _ in }, move: { _ in }, today: {}, open: {}, week: {}))
+            }
+            let host = NSHostingView(rootView: view.defaultAppStorage(defaults))
+            let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
+                                  styleMask: [.borderless], backing: .buffered, defer: true)
+            window.contentView = host
+            func children(_ view: NSView) -> [Any]? {
+                if let canvas = view as? CalendarMonthCanvasView,
+                   host.bounds.intersects(host.convert(canvas.bounds, from: canvas)) {
+                    return canvas.accessibilityChildren()
+                }
+                return view.subviews.lazy.compactMap { children($0) }.first
+            }
+            for numbered in [false, true, false] {
+                defaults.set(numbered, forKey: DefaultsKey.notchCalendarWeekNumbers)
+                let expected = numbered ? 48 : 42
+                waitForCalendar {
+                    host.layoutSubtreeIfNeeded()
+                    return children(host)?.count == expected
+                }
+                suite.expect(children(host)?.count == expected,
+                             "changing the week-number preference updates the existing \(wide ? "wide" : "narrow") carousel without navigation")
+            }
+        }
     }
 
     private static func nativeInteractionContracts(_ suite: TestSuite) {

@@ -254,17 +254,19 @@ private struct NotchCalendarMonthDates: View {
     let select: (Date) -> Void
     let browse: (Date) -> Void
     let settled: (Date) -> Void
+    @AppStorage(DefaultsKey.notchCalendarWeekNumbers) private var weekNumbers = false
 
     var body: some View {
         NotchCalendarCarousel(date: month, component: .month, visibleCount: 1,
                               browse: browse, settled: settled, scrollSensitivity: 0.75, monthAlignmentTolerance: 0.14,
                               coastsMonths: true,
                               contentState: NotchCalendarCarouselContentState(
-                                events: events, selectedDay: selectedDay, today: Calendar.current.startOfDay(for: now))) { date in
+                                events: events, selectedDay: selectedDay, today: Calendar.current.startOfDay(for: now),
+                                weekNumbers: weekNumbers)) { date in
             NotchCalendarMonthCanvas(month: date, selectedDay: selectedDay, now: now, events: events, text: text,
                                      rowHeight: rowHeight, weekdayHeight: weekdayHeight, spacing: spacing,
                                      circle: circle, dotGap: dotGap, select: select,
-                                     horizontalPadding: 20)
+                                     horizontalPadding: 20, weekNumbers: weekNumbers)
         }
         .clipped()
     }

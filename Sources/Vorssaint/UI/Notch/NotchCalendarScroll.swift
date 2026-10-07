@@ -13,6 +13,7 @@ struct NotchCalendarCarouselContentState: Equatable {
     let events: [NotchCalendarEvent]
     let selectedDay: Date?
     let today: Date
+    var weekNumbers = false
 }
 
 private final class CalendarCarouselDocument: NSView {
@@ -374,17 +375,11 @@ final class CalendarCarouselScrollView: NSScrollView {
         // The monthly release has one momentum source. Adding AppKit's
         // momentum deltas to the custom coast would accelerate it twice.
         if ownsMomentum && !event.momentumPhase.isEmpty { return }
-        if event.phase.contains(.began) { scrolling = false }
+        // Touching to interrupt a coast still owes settlement for the travel
+        // already made. An idle touch starts with scrolling false and stays so.
         cancelCoast()
         settle?.cancel()
-        animationGeneration += 1
-        if programmatic {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0
-                contentView.animator().setBoundsOrigin(contentView.bounds.origin)
-            }
-        }
-        programmatic = false
+        cancelAnimation()
         let unphased = event.phase.isEmpty && event.momentumPhase.isEmpty
         alignsUnphasedInput = unphased
         if event.phase.contains(.began) || unphased {
@@ -471,6 +466,16 @@ final class CalendarCarouselScrollView: NSScrollView {
         }
         didSettle?()
     }
+    private func cancelAnimation() {
+        animationGeneration += 1
+        if programmatic {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                contentView.animator().setBoundsOrigin(contentView.bounds.origin)
+            }
+        }
+        programmatic = false
+    }
     private func cancelCoast() { coast?.invalidate(); coast = nil; coastVelocity = 0 }
     private func move(by delta: CGFloat) {
         if let applyScrollDelta { applyScrollDelta(delta) }
@@ -479,6 +484,7 @@ final class CalendarCarouselScrollView: NSScrollView {
     func cancelMomentum() {
         cancelCoast()
         settle?.cancel()
+        cancelAnimation()
         scrolling = false
         momentum = NotchCalendarMomentum()
     }
@@ -487,7 +493,6 @@ final class CalendarCarouselScrollView: NSScrollView {
         let point = NSPoint(x: offset, y: 0)
         if animated {
             cancelMomentum()
-            animationGeneration += 1
             let generation = animationGeneration
             programmatic = true
             NSAnimationContext.runAnimationGroup { context in

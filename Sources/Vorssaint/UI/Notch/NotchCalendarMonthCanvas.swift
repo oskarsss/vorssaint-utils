@@ -20,6 +20,7 @@ struct NotchCalendarMonthCanvas: NSViewRepresentable {
     let select: (Date) -> Void
     /// Each side contributes half of the gap between adjacent months.
     var horizontalPadding: CGFloat = 0
+    var weekNumbers = false
     @Environment(\.locale) private var locale
 
     var height: CGFloat { weekdayHeight + 6 * rowHeight + 6 * spacing }
@@ -33,6 +34,10 @@ struct NotchCalendarMonthCanvas: NSViewRepresentable {
 }
 
 final class CalendarMonthCanvasView: NSView {
+    private struct Week {
+        let number: String
+        let label: String
+    }
     private struct Day {
         let date: Date
         let number: String
@@ -46,6 +51,7 @@ final class CalendarMonthCanvasView: NSView {
     private var localeID = ""
     private var days: [Day] = []
     private var weekdays: [String] = []
+    private var weeks: [Week] = []
     private var renderedEvents: [NotchCalendarEvent] = []
     private let numberFormatter = DateFormatter()
     private let labelFormatter = DateFormatter()
@@ -54,6 +60,8 @@ final class CalendarMonthCanvasView: NSView {
     private var hover: Int?
     private var tracking: NSTrackingArea?
     private var elements: [CalendarMonthDayAccessibility] = []
+    private var weekElements: [NSAccessibilityElement] = []
+    private static let weekNumberWidth: CGFloat = 18
     private(set) var imageBuildCount = 0
     private let accent = NSColor(srgbRed: 1, green: 0.36, blue: 0.39, alpha: 1)
     override var isFlipped: Bool { true }
@@ -81,6 +89,7 @@ final class CalendarMonthCanvasView: NSView {
             $0.month != value.month || visibleSelection($0.selectedDay) != selected
                 || !calendar.isDate($0.now, inSameDayAs: value.now) || events != renderedEvents
                 || $0.text.today != value.text.today || $0.text.hasEvents != value.text.hasEvents
+                || $0.weekNumbers != value.weekNumbers || $0.text.weekNumber != value.text.weekNumber
                 || localeID != locale.identifier
         } ?? true
         let layoutChanged = old.map {
@@ -115,6 +124,18 @@ final class CalendarMonthCanvasView: NSView {
                     today: date == today, selected: date == selected,
                     inMonth: month.map { date >= $0.start && date < $0.end } ?? false, colors: colors[index])
             }
+            weeks = value.weekNumbers ? stride(from: 0, to: dates.count, by: 7).map { index in
+                let date = dates[index]
+                return Week(number: NotchCalendarSupport.weekNumber(of: date).formatted(.number.locale(locale)),
+                            label: NotchCalendarSupport.weekNumberLabel(of: date, text: value.text))
+            } : []
+            weekElements = weeks.map { week in
+                let element = NSAccessibilityElement()
+                element.setAccessibilityRole(.staticText)
+                element.setAccessibilityParent(self)
+                element.setAccessibilityLabel(week.label)
+                return element
+            }
             elements = days.enumerated().map { index, day in
                 let element = CalendarMonthDayAccessibility()
                 element.setAccessibilityRole(.button)
@@ -145,22 +166,30 @@ final class CalendarMonthCanvasView: NSView {
     private func rect(_ index: Int) -> CGRect {
         guard let configuration else { return .zero }
         let inset: CGFloat = configuration.horizontalPadding
-        let width = (bounds.width - 2 * inset) / 7
+        let gutter = configuration.weekNumbers ? Self.weekNumberWidth : 0
+        let width = (bounds.width - 2 * inset - gutter) / 7
         guard width > 0 else { return .zero }
-        return CGRect(x: inset + CGFloat(index % 7) * width,
+        return CGRect(x: inset + gutter + CGFloat(index % 7) * width,
                       y: configuration.weekdayHeight + configuration.spacing
                         + CGFloat(index / 7) * (configuration.rowHeight + configuration.spacing),
                       width: width, height: configuration.rowHeight)
     }
+    private func weekRect(_ row: Int) -> CGRect {
+        guard let configuration else { return .zero }
+        return CGRect(x: configuration.horizontalPadding,
+                      y: configuration.weekdayHeight + configuration.spacing
+                        + CGFloat(row) * (configuration.rowHeight + configuration.spacing),
+                      width: Self.weekNumberWidth, height: configuration.rowHeight)
+    }
     private func index(at point: NSPoint) -> Int? {
         guard bounds.contains(point), let configuration, bounds.width > 0 else { return nil }
-        let inset: CGFloat = configuration.horizontalPadding
-        let width = bounds.width - 2 * inset
-        guard width > 0, point.x >= inset, point.x < bounds.width - inset else { return nil }
+        let start = configuration.horizontalPadding + (configuration.weekNumbers ? Self.weekNumberWidth : 0)
+        let width = bounds.width - configuration.horizontalPadding - start
+        guard width > 0, point.x >= start, point.x < bounds.width - configuration.horizontalPadding else { return nil }
         let row = Int(floor((point.y - configuration.weekdayHeight - configuration.spacing)
                             / (configuration.rowHeight + configuration.spacing)))
         guard (0..<6).contains(row) else { return nil }
-        let index = row * 7 + min(6, Int((point.x - inset) / (width / 7)))
+        let index = row * 7 + min(6, Int((point.x - start) / (width / 7)))
         return days.indices.contains(index) && rect(index).contains(point) ? index : nil
     }
     private func choose(_ index: Int) {
@@ -191,10 +220,17 @@ final class CalendarMonthCanvasView: NSView {
     }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
     override func accessibilityChildren() -> [Any]? {
+        var children: [NSAccessibilityElement] = []
         for (index, element) in elements.enumerated() {
+            if index % 7 == 0, weekElements.indices.contains(index / 7) {
+                let week = weekElements[index / 7]
+                week.setAccessibilityFrame(window?.convertToScreen(convert(weekRect(index / 7), to: nil)) ?? .zero)
+                children.append(week)
+            }
             element.setAccessibilityFrame(window?.convertToScreen(convert(rect(index), to: nil)) ?? .zero)
+            children.append(element)
         }
-        return elements
+        return children
     }
     override func keyDown(with event: NSEvent) {
         var index = hover ?? days.firstIndex(where: { $0.selected }) ?? days.firstIndex(where: { $0.today }) ?? 0
@@ -214,12 +250,13 @@ final class CalendarMonthCanvasView: NSView {
         if image == nil {
             imageBuildCount += 1
             // Capture immutable drawing data, so the cache never retains this view.
-            let days = days, weekdays = weekdays, size = bounds.size, accent = accent
+            let days = days, weekdays = weekdays, weeks = weeks, size = bounds.size, accent = accent
             let rowHeight = configuration.rowHeight, weekdayHeight = configuration.weekdayHeight
             let spacing = configuration.spacing, circleSize = configuration.circle, dotGap = configuration.dotGap
             let inset = configuration.horizontalPadding
+            let gutter = configuration.weekNumbers ? Self.weekNumberWidth : 0
             image = NSImage(size: size, flipped: true) { _ in
-                let width = (size.width - 2 * inset) / 7
+                let width = (size.width - 2 * inset - gutter) / 7
                 let renderedCircleSize = min(circleSize, width - 3)
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.alignment = .center
@@ -230,15 +267,21 @@ final class CalendarMonthCanvasView: NSView {
                                                         width: rect.width, height: height), withAttributes: attributes)
                 }
                 for (column, weekday) in weekdays.enumerated() {
-                    text(weekday, rect: CGRect(x: inset + CGFloat(column) * width, y: 0, width: width, height: weekdayHeight),
+                    text(weekday, rect: CGRect(x: inset + gutter + CGFloat(column) * width, y: 0, width: width, height: weekdayHeight),
                          font: .systemFont(ofSize: 9, weight: .medium), color: .white.withAlphaComponent(0.45))
                 }
                 for (index, day) in days.enumerated() {
                     let rowY = weekdayHeight + spacing + CGFloat(index / 7) * (rowHeight + spacing)
-                    let centerX = inset + (CGFloat(index % 7) + 0.5) * width
+                    let centerX = inset + gutter + (CGFloat(index % 7) + 0.5) * width
                     let circle = CGRect(x: centerX - renderedCircleSize / 2,
                                         y: rowY + (rowHeight - renderedCircleSize - 3 - dotGap) / 2,
                                         width: renderedCircleSize, height: renderedCircleSize)
+                    if index % 7 == 0, weeks.indices.contains(index / 7) {
+                        text(weeks[index / 7].number,
+                             rect: CGRect(x: inset, y: circle.minY, width: gutter, height: renderedCircleSize),
+                             font: .monospacedDigitSystemFont(ofSize: 9, weight: .medium),
+                             color: .white.withAlphaComponent(0.45))
+                    }
                     if day.today || day.selected {
                         (day.today ? accent : NSColor.white).setFill()
                         NSBezierPath(ovalIn: circle).fill()
