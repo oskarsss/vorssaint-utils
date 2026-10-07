@@ -370,7 +370,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         let columns = items.count > 9 ? 4 : 3
         let width = CGFloat(columns) * 88 + 28
         let rows = max(1, Int(ceil(Double(items.count) / Double(columns))))
-        let height = min(360, max(150, CGFloat(rows) * 72 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 86 : 166)))
+        let height = min(360, max(150, CGFloat(rows) * 72 + (message == nil && !items.isEmpty && AXIsProcessTrusted() ? 110 : 166)))
         let point = lastClickPoint
         let screen = point.flatMap { point in NSScreen.screens.first { $0.frame.contains(point) } }
             ?? toggleItem?.button?.window?.screen ?? NSScreen.main
@@ -399,6 +399,11 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             let hosting = NSHostingView(rootView: MenuBarOverflowDrawer(controller: self))
             hosting.frame = CGRect(origin: .zero, size: frame.size)
             hosting.autoresizingMask = [.width, .height]
+            // Clip hosted content as well as the glass: NSGlassEffectView does
+            // not mask arbitrary content backing layers to its rounded shape.
+            hosting.wantsLayer = true
+            hosting.layer?.cornerRadius = 18
+            hosting.layer?.masksToBounds = true
             panel.contentView = Self.drawerBackdrop(content: hosting)
             drawer = panel
         }
@@ -416,6 +421,9 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             let glass = NSGlassEffectView(frame: content.frame)
             glass.style = .regular
             glass.cornerRadius = 18
+            glass.wantsLayer = true
+            glass.layer?.cornerRadius = 18
+            glass.layer?.masksToBounds = true
             glass.contentView = content
             return glass
         }
