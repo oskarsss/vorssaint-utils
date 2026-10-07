@@ -63,7 +63,8 @@ another preset does not overwrite it. Previewing or cancelling a preset does
 not change the active setup or enable remapping.
 
 Safer quitting is a separate, explicit choice rather than part of another
-preset. Its preview shows Command+Q → do nothing and Option+Q → Command+Q.
+preset. Its preview and active rule list show Command+Q → do nothing and
+Option+Q → Quit app (Command + Q).
 All other presets leave quitting alone. Application shortcuts remain personal
 choices in the shortcut editor. No preset takes over Option+T or right Command.
 In particular, right Command → right Option remains a separate choice for

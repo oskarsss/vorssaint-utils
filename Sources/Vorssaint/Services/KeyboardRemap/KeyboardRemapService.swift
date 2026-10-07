@@ -16,11 +16,7 @@ final class KeyboardRemapService: ObservableObject {
     @Published private(set) var statusKey: String?
     var ownsNativeQuit: Bool {
         guard isRunning else { return false }
-        return config.shortcutRules.contains {
-            $0.enabled && $0.source.modifiers == GlobalShortcutModifiers.command.rawValue
-                && ($0.source.character == "q" || ($0.source.character == nil
-                    && GlobalShortcut.layoutKeyLabel(for: $0.source.keyCode, usesCommand: true)?.lowercased() == "q"))
-        }
+        return config.shortcutRules.contains { $0.enabled && $0.source.isQuitShortcut }
     }
     private var config = KeyboardRemapConfiguration()
     private var state = KeyboardRemapSupport.State()

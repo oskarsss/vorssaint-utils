@@ -172,18 +172,10 @@ struct KeyboardRemapSettings: View {
                     }
                     Divider().gridCellColumns(3)
                     ForEach(suggested.keyRules) { rule in
-                        GridRow {
-                            Text(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source)
-                            Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
-                            Text(KeyboardRemapRuleLabel.previewTarget(rule.target))
-                        }
+                        previewRow(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source, target: rule.target)
                     }
                     ForEach(suggested.shortcutRules) { rule in
-                        GridRow {
-                            Text(rule.source.readableLabel)
-                            Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
-                            Text(KeyboardRemapRuleLabel.previewTarget(rule.target))
-                        }
+                        previewRow(rule.source.readableLabel, target: rule.target)
                     }
                 }
                 .padding(14)
@@ -199,15 +191,20 @@ struct KeyboardRemapSettings: View {
             }.padding(24).frame(width: 560)
         }
     }
+    private func previewRow(_ source: String, target: KeyboardRemapTarget) -> some View {
+        GridRow {
+            Text(source)
+            Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(KeyboardRemapRuleLabel.previewTarget(target))
+        }
+    }
+
 }
 
 private enum KeyboardRemapRuleLabel {
     static func previewTarget(_ target: KeyboardRemapTarget) -> String {
-        switch target {
-        case .key(let id): return KeyboardRemapKey.named(id)?.readableLabel ?? id
-        case .shortcut(let chord): return chord.readableLabel
-        default: return self.target(target)
-        }
+        if case .key(let id) = target { return KeyboardRemapKey.named(id)?.readableLabel ?? id }
+        return self.target(target)
     }
 
     static func target(_ target: KeyboardRemapTarget) -> String {

@@ -87,8 +87,8 @@ struct KeyboardRemapKey: Identifiable, Equatable {
 struct KeyboardRemapChord: Codable, Equatable {
     var keyCode: Int64
     var modifiers: Int
-    /// Suggested Q/T rules follow the layout's Command table. Recorded user
-    /// rules use the captured key code and the recorder's layout-aware label.
+    /// Optional logical character matched through the layout's Command table.
+    /// Recorded rules instead match the captured physical key code.
     var character: String?
     init(_ key: Int64, _ modifiers: GlobalShortcutModifiers = [], character: String? = nil) {
         keyCode = key; self.modifiers = modifiers.rawValue; self.character = character
@@ -110,6 +110,14 @@ struct KeyboardRemapChord: Codable, Equatable {
         }
         parts.append(character?.uppercased() ?? KeyboardRemapKey.at(keyCode)?.readableLabel ?? label)
         return parts.joined(separator: " + ")
+    }
+    var isQuitShortcut: Bool {
+        shortcut.modifiers == .command
+            && (character?.lowercased() == "q" || (character == nil
+                && GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: true)?.lowercased() == "q"))
+    }
+    var outputLabel: String {
+        isQuitShortcut ? KeyboardRemapStrings.text("quitApp") + " (" + readableLabel + ")" : readableLabel
     }
     func matches(key: Int64, flags: CGEventFlags, commandLabel: String?) -> Bool {
         shortcut.modifiers == GlobalShortcutModifiers(cgFlags: flags)
@@ -136,7 +144,7 @@ enum KeyboardRemapTarget: Codable, Equatable {
     var label: String {
         switch self {
         case .key(let id): KeyboardRemapKey.named(id)?.displayLabel ?? id
-        case .shortcut(let chord): chord.label
+        case .shortcut(let chord): chord.outputLabel
         case .none: KeyboardRemapStrings.text("doNothing")
         case .inputSource: KeyboardRemapStrings.text("nextLanguage")
         case .capsLock: KeyboardRemapStrings.text("toggleCaps")

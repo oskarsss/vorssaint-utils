@@ -8,11 +8,8 @@ import Foundation
 enum KeyboardRemapTests {
     static var fullConfiguration: KeyboardRemapConfiguration {
         var config = KeyboardRemapPreset.fnLanguages.configuration
-        config.shortcutRules += [
-            .init(.init(12, .command, character: "q"), .none),
-            .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q"))),
-            .init(.init(17, .option, character: "t"), .application("com.apple.Terminal"))
-        ]
+        config.shortcutRules += KeyboardRemapPreset.saferQuit.configuration.shortcutRules
+        config.shortcutRules.append(.init(.init(17, .option, character: "t"), .application("com.apple.Terminal")))
         return config
     }
 
