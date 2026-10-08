@@ -139,6 +139,48 @@ final class FeatureRuntime: ObservableObject {
         replaceAvailable(with: preset.features, enabling: preset.enableKeys)
     }
 
+    struct ConfigurationSnapshot {
+        let available: Set<AppFeature>
+        /// Only explicitly saved values: Undo also restores an unset preference.
+        let values: [String: Bool]
+    }
+
+    func configurationSnapshot() -> ConfigurationSnapshot {
+        let saved = savedPreferences()
+        let keys = Set(AppFeature.allCases.flatMap(\.enabledKeys))
+            .union(AppFeature.allCases.map(\.availabilityKey))
+            .union([DefaultsKey.notchInitialExtensionsInstalled])
+        return ConfigurationSnapshot(available: Set(AppFeature.allCases.filter(\.isAvailable)),
+            values: Dictionary(uniqueKeysWithValues: keys.compactMap { key in
+                (saved[key] as? Bool).map { (key, $0) }
+            }))
+    }
+
+    /// Undo a bulk action without first-install defaults overriding saved choices.
+    func restore(_ snapshot: ConfigurationSnapshot) {
+        let previouslyAvailable = Set(AppFeature.allCases.filter(\.isAvailable))
+        let keys = Set(AppFeature.allCases.flatMap(\.enabledKeys))
+            .union(AppFeature.allCases.map(\.availabilityKey))
+            .union([DefaultsKey.notchInitialExtensionsInstalled])
+        for key in keys { UserDefaults.standard.set(snapshot.values[key], forKey: key) }
+        loadedThisSession.formUnion(snapshot.available)
+        for feature in AppFeature.allCases
+        where previouslyAvailable.contains(feature) || feature.isAvailable {
+            Self.bindings[feature]?()
+        }
+        finishAvailabilityChange()
+    }
+
+    /// Explicitly engage a feature that is included but configured off. A
+    /// reinstall by itself continues to preserve the saved off choice.
+    func turnOn(_ feature: AppFeature) {
+        guard feature.isAvailable else { return }
+        let keys = feature == .notchLiveEqualizer ? feature.enabledKeys : feature.initialEnableKeys
+        for key in keys { UserDefaults.standard.set(true, forKey: key) }
+        Self.bindings[feature]?()
+        finishAvailabilityChange()
+    }
+
     /// Replaces the installed set after the first-run picker. It uses the same
     /// availability layer as the hub, so unselected features disappear without
     /// losing any of their settings.
@@ -396,6 +438,7 @@ final class FeatureRuntime: ObservableObject {
         .monitorNetwork: { FeatureRuntime.syncMonitor() },
         .monitorDisk: { FeatureRuntime.syncMonitor() },
         .monitorPower: { FeatureRuntime.syncMonitor() },
+        .connectedDevices: { FeatureRuntime.syncMonitor() },
         .fanControl: {
             SystemMonitor.shared.planDidChange()
             let defaults = UserDefaults.standard
