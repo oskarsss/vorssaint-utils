@@ -236,10 +236,9 @@ struct TrailingSwitchToggleStyle: ToggleStyle {
 }
 
 /// The common page shell for feature settings: the same title, content width,
-/// padding and cards as Energy, Mouse and Dynamic Island, with a demo nearby.
+/// padding and cards as Energy, Mouse and Dynamic Island.
 struct SettingsPageContent<Content: View>: View {
     @ObservedObject private var l10n = L10n.shared
-    @State private var showingPreview = false
     let feature: AppFeature
     let content: Content
 
@@ -259,11 +258,6 @@ struct SettingsPageContent<Content: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                    Button(SettingsDiscoveryStrings.localized(l10n.language).preview, systemImage: "play.rectangle") {
-                        showingPreview = true
-                    }
-                    .buttonStyle(.borderless)
-                    .popover(isPresented: $showingPreview) { FeaturePreview(feature: feature) }
                 }
                 content
             }

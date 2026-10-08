@@ -21,7 +21,6 @@ struct FeatureHubSettings: View {
     @State private var includedOnly = false
     @State private var enabledFirst = false
     @State private var revealedFeature: AppFeature?
-    @State private var undoBulkChange: FeatureRuntime.ConfigurationSnapshot?
     /// Tracks the feature-target request currently being revealed, so a
     /// delayed retry from an older request cannot act after a newer one has
     /// already taken over (same convention as `SettingsSectionFocusModifier`).
@@ -34,8 +33,6 @@ struct FeatureHubSettings: View {
     /// Installed switches never once turned on, read when the page appears
     /// and after every install change rather than on every redraw.
     @State private var neverUsed: [AppFeature] = []
-    /// The batch just uninstalled from that card, kept for its Undo.
-    @State private var recentlyUninstalled: [AppFeature] = []
 
     /// Below this, the offer would be more to read than it saves.
     private static let neverUsedMinimum = 3
@@ -153,16 +150,28 @@ struct FeatureHubSettings: View {
                 HStack { categoryPicker; catalogOptions }
                 VStack(alignment: .leading) { categoryPicker; catalogOptions }
             }
-            HStack {
-                let shown = FeatureGroup.allCases.reduce(0) { $0 + members(in: $1).count }
-                Text(String(format: discovery.text(.shown), shown))
-                Spacer()
-                Text(String(format: discovery.text(.hiddenBy),
-                            experience.hiddenFeatureCount(revealing: revealedFeature), discovery.name(experience)))
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            Text(discovery.text(.filterHelp))
+            let shown = FeatureGroup.allCases.reduce(0) { $0 + members(in: $1).count }
+            Text(String(format: discovery.text(.shown), shown))
                 .font(.caption).foregroundStyle(.secondary)
+            let hidden = experience.hiddenFeatureCount(revealing: revealedFeature)
+            if hidden > 0 {
+                Divider()
+                HStack(spacing: 12) {
+                    Image(systemName: "eye.slash")
+                        .font(.title3).foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(format: discovery.text(.hidden), hidden))
+                            .font(.callout.weight(.semibold))
+                        Text(discovery.text(.filterHelp))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Button(discovery.text(.showEverything)) { experienceRaw = SettingsExperience.expert.rawValue }
+                        .buttonStyle(.link)
+                }
+            }
+
         }
     }
 
@@ -267,27 +276,21 @@ struct FeatureHubSettings: View {
                     .font(.headline)
                 Spacer(minLength: 12)
                 Button(hub.installAllButton) {
-                    undoBulkChange = features.configurationSnapshot()
                     FeatureRuntime.shared.setAllAvailable(true)
                 }
                 .disabled(features.availableCount == features.installableCount)
                 Button(hub.uninstallAllButton) {
-                    undoBulkChange = features.configurationSnapshot()
                     FeatureRuntime.shared.setAllAvailable(false)
                 }
                 .disabled(features.availableCount == 0)
             }
             InstalledShareBar(installed: features.availableCount, total: features.installableCount)
-            if let snapshot = undoBulkChange {
-                HStack {
-                    Text(discovery.text(.undoBulk))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer(minLength: 12)
-                    Button(l10n.s.menuUndo) {
-                        features.restore(snapshot)
-                        undoBulkChange = nil
-                    }
-                }
+            HStack {
+                Spacer(minLength: 12)
+                Button(l10n.s.menuUndo) { features.undoLastFeatureChange() }
+                    .disabled(features.undoCount == 0)
+                Button(l10n.s.menuRedo) { features.redoLastFeatureChange() }
+                    .disabled(features.redoCount == 0)
             }
         }
     }
@@ -298,21 +301,7 @@ struct FeatureHubSettings: View {
     /// features, and Undo puts back exactly what left.
     @ViewBuilder
     private var neverUsedCard: some View {
-        if !recentlyUninstalled.isEmpty {
-            SettingsCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.green)
-                        .accessibilityHidden(true)
-                    Text(hub.footerNote)
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 12)
-                    Button(l10n.s.menuUndo, action: undoNeverUsedUninstall)
-                }
-            }
-        } else if neverUsed.count >= Self.neverUsedMinimum {
+        if neverUsed.count >= Self.neverUsedMinimum {
             SettingsCard(title: hub.neverUsedTitle) {
                 Text(String(format: hub.neverUsedMessageFormat,
                             neverUsed.map { $0.hubTitle(l10n.s, hub: hub) }.joined(separator: ", ")))
@@ -342,21 +331,8 @@ struct FeatureHubSettings: View {
             refreshNeverUsed()
             return
         }
-        recentlyUninstalled = batch
         withAnimation(.easeOut(duration: 0.22)) {
             FeatureRuntime.shared.setAvailable(batch, false)
-        }
-    }
-
-    /// Changing one's mind is also an answer to the offer, so the features
-    /// that come back are kept and never offered again. None of them was
-    /// ever on, and the reinstall leaves their switches off too.
-    private func undoNeverUsedUninstall() {
-        let batch = recentlyUninstalled
-        recentlyUninstalled = []
-        FeatureRuntime.shared.keep(batch)
-        withAnimation(.easeOut(duration: 0.22)) {
-            FeatureRuntime.shared.setAvailable(batch, true, enablingFirstInstalls: false)
         }
     }
 
@@ -456,7 +432,6 @@ private struct FeatureHubRow: View {
     @ObservedObject private var features = FeatureRuntime.shared
     @State private var confirmingExtensions = false
     @State private var hovering = false
-    @State private var showingPreview = false
     @State private var preferenceRevision = 0
     let feature: AppFeature
     let hub: FeatureHubStrings
@@ -518,16 +493,6 @@ private struct FeatureHubRow: View {
                     .accessibilityLabel("\(accessibilityTitle). \(feature.hubDescription(hub)). \(statusLabel)")
                     .opacity(unsupportedReason == nil ? 1 : 0.4)
                     .saturation(unsupportedReason == nil ? 1 : 0)
-            }
-            Button { showingPreview = true } label: {
-                Image(systemName: "play.rectangle").font(.title3)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
-            .help(SettingsDiscoveryStrings.localized(l10n.language).preview)
-            .accessibilityLabel("\(discovery.preview): \(accessibilityTitle)")
-            .popover(isPresented: $showingPreview) {
-                FeaturePreview(feature: feature)
             }
             installSwitch
         }

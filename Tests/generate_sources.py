@@ -60,8 +60,9 @@ def main():
     runtime = "Sources/Vorssaint/App/FeatureRuntime.swift"
     runtime_body = "".join(declaration(runtime, prefix).replace("private func", "func", 1)
                           for prefix in ["    private func mayFlip(", "    func setAvailable(",
-                                         "    struct ConfigurationSnapshot {", "    func configurationSnapshot()",
-                                         "    func restore(", "    func setAllAvailable(",
+                                         "    private func configurationValues()", "    private func applyHistoryChange(",
+                                         "    func undoLastFeatureChange()", "    func redoLastFeatureChange()",
+                                         "    func setAllAvailable(",
                                          "    func turnOn(", "    func replaceAvailable("])
     runtime_body = (runtime_body
                     .replace("UserDefaults.standard", "Self.defaults")

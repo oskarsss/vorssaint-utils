@@ -14,6 +14,7 @@ enum FeatureRuntimeContract {
         var offerableThisSession: Set<AppFeature> = []
         var synchronized: [AppFeature] = []
         var revisions = 0
+        var changeHistory = FeatureChangeHistory()
         func syncFeature(_ feature: AppFeature) { synchronized.append(feature) }
         func finishAvailabilityChange() { revisions += 1 }
         func savedPreferences() -> [String: Any] {
@@ -43,26 +44,67 @@ enum FeatureRuntimeContract {
                          && enabledKeys.map { defaults.bool(forKey: $0) } == savedBehavior,
                          "changing \(view.rawValue) visibility preserves availability and saved behavior")
         }
-        let snapshot = runtime.configurationSnapshot()
         defaults.removeObject(forKey: DefaultsKey.notchInitialExtensionsInstalled)
         defaults.removeObject(forKey: DefaultsKey.notchLyricsEnabled)
-        let unsavedSnapshot = runtime.configurationSnapshot()
+        let originalValues = runtime.configurationValues()
         for installAll in [true, false] {
             runtime.setAllAvailable(installAll)
             suite.expect(AppFeature.allCases.allSatisfy { $0.isAvailable(in: defaults) == installAll },
                          "bulk \(installAll ? "install" : "uninstall") changes every supported feature")
-            runtime.restore(unsavedSnapshot)
-            let restored = runtime.configurationSnapshot()
-            suite.expect(restored.available == unsavedSnapshot.available && restored.values == unsavedSnapshot.values,
+            runtime.undoLastFeatureChange()
+            suite.expect(runtime.configurationValues() == originalValues,
                          "bulk Undo restores availability, saved off choices and unset preferences")
             suite.expect(defaults.persistentDomain(forName: Fixture.domain)?[DefaultsKey.notchInitialExtensionsInstalled] == nil,
                          "bulk Undo removes a first-install marker that was previously unset")
         }
-        runtime.restore(snapshot)
+        runtime.setAllAvailable(true)
+        runtime.setAvailable([.switcher], false)
+        runtime.turnOn(.clipboardHistory)
+        runtime.undoLastFeatureChange()
+        suite.expect(!defaults.bool(forKey: DefaultsKey.clipboardHistoryEnabled)
+                     && !AppFeature.switcher.isAvailable(in: defaults),
+                     "Undo reverses the latest manual behavior change without rolling back the bulk action")
+        runtime.undoLastFeatureChange()
+        suite.expect(AppFeature.switcher.isAvailable(in: defaults) && AppFeature.notch.isAvailable(in: defaults),
+                     "the next Undo reverses only the manual inclusion change")
+        defaults.set(true, forKey: DefaultsKey.windowGestureEnabled)
+        runtime.undoLastFeatureChange()
+        suite.expect(Set(AppFeature.allCases.filter { $0.isAvailable(in: defaults) }) == available
+                     && defaults.bool(forKey: DefaultsKey.windowGestureEnabled),
+                     "bulk Undo follows manual Undos and preserves unrelated settings edited since")
+        runtime.redoLastFeatureChange()
+        runtime.redoLastFeatureChange()
+        runtime.redoLastFeatureChange()
+        suite.expect(AppFeature.notch.isAvailable(in: defaults) && !AppFeature.switcher.isAvailable(in: defaults)
+                     && defaults.bool(forKey: DefaultsKey.clipboardHistoryEnabled),
+                     "Redo replays bulk, manual inclusion and behavior actions in order")
+        runtime.undoLastFeatureChange()
+        runtime.setAvailable([.switcher], true)
+        suite.expect(runtime.changeHistory.redoCount == 0,
+                     "a fresh manual edit clears Redo")
+        while runtime.changeHistory.undoCount > 0 { runtime.undoLastFeatureChange() }
+        var afterFirstTen: [String: Bool] = [:]
+        for index in 0..<60 {
+            runtime.setAvailable([.clipboardHistory], !AppFeature.clipboardHistory.isAvailable(in: defaults))
+            if index == 9 { afterFirstTen = runtime.configurationValues() }
+        }
+        suite.expect(runtime.changeHistory.undoCount == 50, "feature history retains at most 50 changes")
+        for _ in 0..<50 { runtime.undoLastFeatureChange() }
+        suite.expect(runtime.configurationValues() == afterFirstTen && runtime.changeHistory.undoCount == 0,
+                     "50 Undos reach the oldest retained state without undoing discarded actions")
+        runtime.undoLastFeatureChange()
+        suite.expect(runtime.configurationValues() == afterFirstTen, "Undo on an empty history is harmless")
+        defaults.set(false, forKey: DefaultsKey.clipboardHistoryEnabled)
         runtime.setAvailable([.connectedDevices], true)
         runtime.setAvailable([.connectedDevices], false)
         suite.expect(runtime.synchronized.last == .connectedDevices,
                      "removing Connected Devices synchronizes its monitor immediately")
+        let beforeUnusedRemoval = runtime.configurationValues()
+        runtime.setAvailable([.clipboardHistory, .windowLayout], false)
+        runtime.undoLastFeatureChange()
+        suite.expect(runtime.configurationValues() == beforeUnusedRemoval
+                     && !defaults.bool(forKey: DefaultsKey.clipboardHistoryEnabled),
+                     "undoing unused-feature removal restores the batch without switching on saved off behaviors")
         runtime.setAvailable([.clipboardHistory], false)
         suite.expect(runtime.synchronized.last == .clipboardHistory,
                      "removing a feature synchronizes its teardown immediately")
