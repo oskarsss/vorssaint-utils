@@ -67,8 +67,8 @@ three features included. It shows the hidden-count banner and Undo/Redo controls
 without the history caption. Catalog search filters visible features; sidebar
 search can still find any feature. The removed setup card is shown for comparison.
 
-![Focused sidebar and Features catalog](images/settings-discovery/focused.png)
+![Focused sidebar and Features catalog](images/settings-discovery/focused.jpg)
 
-![Everything reveals all 77 features with the same three installed](images/settings-discovery/everything.png)
+![Everything reveals all 77 features with the same three installed](images/settings-discovery/everything.jpg)
 
 ![Removed setup card from the earlier layout](images/settings-discovery/removed-setup-card.png)
