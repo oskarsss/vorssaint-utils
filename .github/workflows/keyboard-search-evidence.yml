@@ -1,0 +1,28 @@
+name: Command bar keyboard evidence
+on:
+  push:
+    branches: [chore/command-bar-keyboard-evidence]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build app
+        run: ./build.sh
+      - name: Selftest
+        run: ./build/Vorssaint --selftest
+      - name: Unit tests
+        run: ./build.sh --test
+      - name: Capture production command bar with controlled sample apps
+        run: ./build/Vorssaint --keyboard-search-evidence
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: keyboard-search-screenshots
+          path: build/keyboard-search-screenshots/*.png
+          if-no-files-found: warn

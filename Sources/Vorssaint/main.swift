@@ -26,6 +26,11 @@ if CommandLine.arguments.contains("--uninstall") {
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--keyboard-search-evidence") {
+    CommandBarService.captureKeyboardEvidence()
+    app.run()
+    exit(0)
+}
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

@@ -3642,3 +3642,61 @@ final class CommandBarService: ObservableObject {
         }
     }
 }
+
+// Evidence-only fixture, excluded from the feature PR.
+extension CommandBarService {
+    static func captureKeyboardEvidence() {
+        NSApp.setActivationPolicy(.accessory)
+        let service = shared
+        let entries = [
+            CommandBarEntry(id: "app.terminal", title: "Terminal", subtitle: "Applications",
+                            keywords: "shell console", icon: .appIcon(path: "/System/Applications/Utilities/Terminal.app"), run: { _ in }),
+            CommandBarEntry(id: "app.textedit", title: "TextEdit", subtitle: "Applications",
+                            keywords: "editor", icon: .appIcon(path: "/System/Applications/TextEdit.app"), run: { _ in })
+        ]
+        let output = URL(fileURLWithPath: "build/keyboard-search-screenshots", isDirectory: true)
+        try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let cases: [(String, String, Bool)] = [
+            ("english", "termi", true),
+            ("wrong-layout-before", "еукьш", false),
+            ("wrong-layout-after", "еукьш", true)
+        ]
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 230),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        let host = NSHostingView(rootView: CommandBarView().environment(\.colorScheme, .dark))
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        func capture(_ index: Int) {
+            guard index < cases.count else { NSApp.stop(nil); return }
+            let (name, query, recover) = cases[index]
+            service.query = query
+            let candidates = entries.enumerated().map { CommandBarCandidate(index: $0.offset, title: $0.element.title, keywords: $0.element.keywords) }
+            let ranked = recover
+                ? CommandBarSearch.rankedIndexes(candidates: candidates, matching: query)
+                : candidates.compactMap {
+                    CommandBarSearch.score(normalizedTitle: $0.normalizedTitle, normalizedKeywords: $0.normalizedKeywords,
+                                           normalizedQuery: CommandBarSearch.normalized(query)) == nil ? nil : $0.index
+                }
+            service.rows = ranked.map { entries[$0] }
+            service.selectedIndex = 0
+            service.isCompactHome = false
+            service.sectionTitles = [:]
+            print("EVIDENCE \(name): \(query) -> \(service.rows.map(\.title))")
+            precondition(recover ? service.rows.first?.title == "Terminal" : service.rows.isEmpty)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                host.layoutSubtreeIfNeeded()
+                let size = host.fittingSize
+                window.setContentSize(size)
+                host.layoutSubtreeIfNeeded()
+                let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name + ".png"))
+                capture(index + 1)
+            }
+        }
+        DispatchQueue.main.async { capture(0) }
+    }
+}
