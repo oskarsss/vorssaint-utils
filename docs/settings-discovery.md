@@ -69,6 +69,14 @@ search can still find any feature. The removed setup card is shown for compariso
 
 ![Focused sidebar and Features catalog](images/settings-discovery/focused.jpg)
 
-![Everything reveals all 77 features with the same three installed](images/settings-discovery/everything.jpg)
+The Everything captures use the production Settings UI in a separate screenshot
+host with an in-memory configuration: all 77 features are included, saved behavior
+switches are on, and zero features are hidden. No background services are started
+and no existing app preferences are changed. The category overview collapses the
+feature rows to show all ten category cards together.
+
+![Everything with all 77 features included](images/settings-discovery/everything.jpg)
+
+![All ten feature categories with every feature included](images/settings-discovery/categories-overview.jpg)
 
 ![Removed setup card from the earlier layout](images/settings-discovery/removed-setup-card.png)
