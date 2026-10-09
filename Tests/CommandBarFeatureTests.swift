@@ -1290,6 +1290,37 @@ enum CommandBarFeatureTests {
                "command bar search ignores accents and case")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "brilho"),
                "a plain word finds its command")
+        for query in ["еукьш", "ЕУКЬШ", "еукьштфд", "terьш"] {
+            suite.expect(CommandBarSearch.matches(title: "Terminal", query: query),
+                         "wrong-layout query \(query) still finds Terminal")
+        }
+        suite.expect(CommandBarSearch.matches(title: "Open app", keywords: "terminal shell", query: "еукьш"),
+                     "keyboard recovery also searches keywords")
+        suite.expect(CommandBarSearch.matches(title: "Brightness", query: "икшпретуыы")
+                     && CommandBarSearch.matches(title: "Firefox", query: "ашкуащч")
+                     && CommandBarSearch.matches(title: "Keyboard", query: "лунищфкв"),
+                     "key identity survives accent folding of й and ё")
+        suite.expect(CommandBarSearch.matches(title: "Terminal", query: "τερμι")
+                     && CommandBarSearch.matches(title: "Terminal", query: "אקרצן"),
+                     "Greek and Hebrew keyboard positions recover English queries")
+        suite.expect(CommandBarSearch.queryAlternatives("й ї і є ґ").contains("q ] s ' `"),
+                     "Ukrainian keys preserve their QWERTY positions")
+        suite.expect(CommandBarSearch.queryAlternatives("ў і").contains("o b"),
+                     "Belarusian keys preserve their QWERTY positions")
+        suite.expect(CommandBarSearch.matches(title: "Open Terminal", query: "щзут еукьш")
+                     && !CommandBarSearch.matches(title: "Terminal", query: "еукьш music"),
+                     "recovered multiword searches still require every token")
+        let keyboardCandidates = [
+            CommandBarCandidate(index: 0, title: "Terminal", boost: 5000),
+            CommandBarCandidate(index: 1, title: "Еукьш"),
+            CommandBarCandidate(index: 2, title: "Terminal Settings")
+        ]
+        suite.expect(CommandBarSearch.rankedIndexes(candidates: keyboardCandidates, matching: "еукьш") == [1, 0, 2],
+                     "literal native text leads recovered matches and each row appears once")
+        suite.expect(CommandBarSearch.queryAlternatives("  termi  40% ") == ["termi 40%"]
+                     && CommandBarSearch.queryAlternatives("еукьш 40%").contains("termi 40%")
+                     && CommandBarSearch.queryAlternatives("  ") == [""],
+                     "ordinary Latin queries, numeric arguments and empty queries stay intact")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "Brilho"),
                "capitalized queries land in the same place")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "brlho"),

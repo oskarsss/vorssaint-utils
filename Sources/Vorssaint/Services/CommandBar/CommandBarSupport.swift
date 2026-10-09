@@ -165,6 +165,32 @@ struct CommandBarCandidate {
 /// also matches as an in-order subsequence of a word ("brlho" finds "brilho")
 /// and, as a last resort, within one edit of a word ("birlho" too).
 enum CommandBarSearch {
+    /// Physical-key alternatives, not transliterations: Russian `еукьш`
+    /// is `termi` on US QWERTY. Keep the literal query first so native names
+    /// remain searchable. Only non-Latin keys are replaced; Latin fragments,
+    /// whitespace and numeric arguments survive a mid-query layout switch.
+    private static let keyboardLayouts: [[Character: Character]] = [
+        ("йцукенгшщзхъфывапролджэячсмитьбюё", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
+        ("йцукенгшщзхїфівапролджєячсмитьбюґ", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
+        ("йцукенгшўзх'фывапролджэячсмітьбюё", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
+        ("ςερτυθιοπασδφγηξκλζχψωβνμ", "wertyuiopasdfghjklzxcvbnm"),
+        ("קראטוןםפשדגכעיחלךףזסבהנמצתץ", "ertyuiopasdfghjkl;zxcvbnm,.")
+    ].map { source, target in
+        Dictionary(uniqueKeysWithValues: zip(source, target).filter { !$0.0.isASCII })
+    }
+
+    static func queryAlternatives(_ query: String) -> [String] {
+        var alternatives = [normalized(query)]
+        // Remap before accent folding: й, ї and ё carry keyboard identity
+        // that the ordinary text normalizer deliberately discards.
+        let lowercased = strippingInvisibles(query).lowercased()
+        for layout in keyboardLayouts {
+            let remapped = normalized(String(lowercased.map { layout[$0] ?? $0 }))
+            if !alternatives.contains(remapped) { alternatives.append(remapped) }
+        }
+        return alternatives
+    }
+
     /// A leading colon scopes the global search to emoji. The marker is not
     /// part of the text being matched, so `:fire` finds the same emoji as
     /// `fire` inside the Emoji category.
@@ -274,9 +300,10 @@ enum CommandBarSearch {
     /// Whole-query hits on the title dominate, then per-token quality
     /// (whole word > word prefix > substring > subsequence > one typo).
     static func score(title: String, keywords: String = "", query: String) -> Int? {
-        score(normalizedTitle: normalized(title),
-              normalizedKeywords: normalized(keywords),
-              normalizedQuery: normalized(query))
+        let title = normalized(title), keywords = normalized(keywords)
+        return queryAlternatives(query).compactMap {
+            score(normalizedTitle: title, normalizedKeywords: keywords, normalizedQuery: $0)
+        }.max()
     }
 
     /// The scoring itself, over text that is already folded. Everything the
@@ -314,21 +341,29 @@ enum CommandBarSearch {
     /// lead match quality; ties keep the caller's order so equally good rows
     /// stay where the catalog put them.
     static func rankedIndexes(candidates: [CommandBarCandidate], matching query: String) -> [Int] {
-        let normalizedQuery = normalized(query)
-        let scored: [(index: Int, priority: Int, tier: Int, score: Int, position: Int)] = candidates.enumerated()
+        let queries = queryAlternatives(query)
+        let scored: [(index: Int, priority: Int, literal: Bool, tier: Int, score: Int, position: Int)] = candidates.enumerated()
             .compactMap { position, candidate in
-                guard let base = score(normalizedTitle: candidate.normalizedTitle,
-                                       normalizedKeywords: candidate.normalizedKeywords,
-                                       normalizedQuery: normalizedQuery) else { return nil }
-                let tier = matchTier(title: candidate.normalizedTitle,
-                                     keywords: candidate.normalizedKeywords,
-                                     query: normalizedQuery)
-                return (candidate.index, candidate.priority, tier,
-                        base + candidate.boost, position)
+                let matches = queries.enumerated().compactMap { offset, query -> (literal: Bool, tier: Int, score: Int)? in
+                    guard let base = score(normalizedTitle: candidate.normalizedTitle,
+                                           normalizedKeywords: candidate.normalizedKeywords,
+                                           normalizedQuery: query) else { return nil }
+                    return (offset == 0,
+                            matchTier(title: candidate.normalizedTitle,
+                                      keywords: candidate.normalizedKeywords, query: query), base)
+                }
+                guard let best = matches.max(by: {
+                    if $0.literal != $1.literal { return !$0.literal }
+                    if $0.tier != $1.tier { return $0.tier < $1.tier }
+                    return $0.score < $1.score
+                }) else { return nil }
+                return (candidate.index, candidate.priority, best.literal, best.tier,
+                        best.score + candidate.boost, position)
             }
         return scored
             .sorted {
                 if $0.priority != $1.priority { return $0.priority > $1.priority }
+                if $0.literal != $1.literal { return $0.literal }
                 if $0.tier != $1.tier { return $0.tier > $1.tier }
                 if $0.score != $1.score { return $0.score > $1.score }
                 return $0.position < $1.position
