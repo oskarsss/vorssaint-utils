@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
         statusController = StatusItemController()
         MenuBarOverflowController.shared.onChooseIcons = { [weak self] in
-            SettingsRouter.shared.request(FeatureSettingsDestination(.general, sectionAnchor: .panelConfiguration))
+            SettingsRouter.shared.request(FeatureSettingsDestination(.general, sectionAnchor: .iconDrawer))
             self?.openSettingsWindow()
         }
         MenuBarOverflowController.shared.start()

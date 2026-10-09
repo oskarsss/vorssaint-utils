@@ -9,7 +9,7 @@ import MenuBarVisibilityBridge
 
 /// One Icon Drawer control, with a compact dropdown or a paged menu-bar strip.
 /// Native visibility hides the originals; Accessibility opens their menus.
-final class MenuBarOverflowController: NSObject, ObservableObject {
+final class MenuBarOverflowController: NSObject, ObservableObject, NSMenuDelegate {
     static let shared = MenuBarOverflowController()
     var onChooseIcons: (() -> Void)?
     @Published var isChoosingIcons = false
@@ -48,6 +48,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     private var nativeMenuMonitor: Any?
     private var nativeMenuLocalMonitor: Any?
     private let images = MenuBarOverflowImages()
+    private let preservedFocus = MenuBarOverflowFocus()
     private var lastMonochrome = true
     private var monochrome: Bool {
         UserDefaults.standard.object(forKey: DefaultsKey.menuBarOverflowMonochrome) as? Bool ?? true
@@ -195,6 +196,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
     @objc private func clicked() {
         lastClickPoint = recentPointerPoint()
         if NSApp.currentEvent?.type == .rightMouseUp {
+            dismissNativeMenu()
             let menu = NSMenu()
             let open = menu.addItem(withTitle: "Open Icon Drawer", action: #selector(showDrawer), keyEquivalent: "")
             open.target = self
@@ -206,16 +208,25 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
                 menu.addItem(icons)
             }
             menu.addItem(.separator())
-            let settings = menu.addItem(withTitle: "Choose icons…", action: #selector(chooseIcons), keyEquivalent: "")
+            let settings = menu.addItem(withTitle: "Open settings", action: #selector(chooseIcons), keyEquivalent: "")
             settings.target = self
             menu.addItem(.separator())
             let disable = menu.addItem(withTitle: "Turn off Icon Drawer", action: #selector(disable), keyEquivalent: "")
             disable.target = self
             // Explicitly disabled setup actions must stay disabled.
             menu.autoenablesItems = false
-            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            menu.delegate = self
+            toggleItem?.menu = menu
+            toggleButton?.performClick(nil)
         } else if inlineExpanded { openInlineAtPointer() }
         else { showDrawer() }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard toggleItem?.menu === menu else { return }
+        toggleItem?.menu = nil
+        toggleButton?.target = self
+        toggleButton?.action = #selector(clicked)
     }
 
     @objc private func disable() {
@@ -275,6 +286,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         closeDrawer()
         if let assertion { VSMenuBarVisibilityRelease(assertion) }
         assertion = nil
+        preservedFocus.stop()
         spacerItem?.length = 18
         isCollapsed = false
         isBusy = false
@@ -316,7 +328,6 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         let saved = configuredBundles
         let ownBundle = Bundle.main.bundleIdentifier
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        let native = usesNativeVisibility
         let runningApps = NSWorkspace.shared.runningApplications
         // Inventory only scans app bundles, but visibility must also preserve
         // unselected UI services and extensions that can own status items.
@@ -581,6 +592,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
             if let handle {
                 let previous = self.assertion
                 self.assertion = handle
+                self.preservedFocus.start()
                 if let previous { VSMenuBarVisibilityRelease(previous) }
                 completion(true, nil)
             } else {
@@ -710,7 +722,7 @@ final class MenuBarOverflowController: NSObject, ObservableObject {
         let menu = NSMenu()
         addInlineItems(to: menu, start: start)
         menu.addItem(.separator())
-        let choose = menu.addItem(withTitle: "Choose icons…", action: #selector(chooseIcons), keyEquivalent: "")
+        let choose = menu.addItem(withTitle: "Open settings", action: #selector(chooseIcons), keyEquivalent: "")
         choose.target = self
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }

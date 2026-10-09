@@ -3,6 +3,13 @@ import Foundation
 
 enum MenuBarOverflowTests {
     static func run(_ suite: TestSuite) {
+        let activeFocus = "Did receive state update: state: <DNDState activeModeConfiguration: <DNDModeConfiguration mode: <DNDMode modeIdentifier: work; name: Work; symbolImageName: briefcase.fill;>> previousState: <DNDMode modeIdentifier: old; name: Old; symbolImageName: moon.fill;>"
+        suite.expect(MenuBarOverflowSupport.focusMode(in: activeFocus) == .init(name: "Work", symbol: "briefcase.fill"),
+                     "Focus replacement follows the current mode rather than the previous state")
+        suite.expect(MenuBarOverflowSupport.focusMode(in: "Did receive state update: activeModeConfiguration: (null) previousState: " + activeFocus) == nil,
+                     "turning Focus off cannot retain the previous mode icon")
+        suite.expect(MenuBarOverflowSupport.focusMode(in: "unrelated or truncated log line") == nil,
+                     "incomplete Focus state does not invent an active mode")
         suite.expect(MenuBarOverflowSupport.Layout.resolved("unknown") == .dropdown,
                      "invalid stored layout falls back to the dropdown")
         let right = CGRect(x: 800, y: 1000, width: 640, height: 32)

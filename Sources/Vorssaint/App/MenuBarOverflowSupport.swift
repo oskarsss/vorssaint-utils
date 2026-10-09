@@ -3,6 +3,29 @@
 import Foundation
 
 enum MenuBarOverflowSupport {
+    struct FocusMode: Equatable {
+        let name: String
+        let symbol: String
+    }
+
+    // Adapted from Pelmet's GPL-3.0 FocusLogParser (Gabriel Faucon, 2026).
+    // https://github.com/fif7y/pelmet/blob/main/Packages/PelmetCore/Sources/PelmetCore/FocusLogParser.swift
+    static func focusMode(in message: String) -> FocusMode? {
+        let current = message.components(separatedBy: "previousState:")[0]
+        guard !current.contains("activeModeConfiguration: (null)"),
+              let mode = current.range(of: "mode: <DNDMode") else { return nil }
+        let block = current[mode.upperBound...]
+        func field(_ key: String) -> String? {
+            guard let start = block.range(of: " \(key): ")?.upperBound else { return nil }
+            let rest = block[start...]
+            let end = rest.firstIndex { $0 == ";" || $0 == ">" } ?? rest.endIndex
+            let value = rest[..<end].trimmingCharacters(in: .whitespaces)
+            return value.isEmpty ? nil : value
+        }
+        guard let id = field("modeIdentifier"), id != "(null)" else { return nil }
+        return FocusMode(name: field("name") ?? "Focus", symbol: field("symbolImageName") ?? "moon.fill")
+    }
+
     enum Layout: String, CaseIterable {
         case dropdown
         case menuBar
