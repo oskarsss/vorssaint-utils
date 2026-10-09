@@ -1300,7 +1300,7 @@ enum CommandBarFeatureTests {
             }.flatMap(InputSourceSelection.keyboardLayoutData)
         }
         if let us = keyboardData("US") {
-            var keyboardMaps: [[Character: Character]] = []
+            var keyboardMaps: [[String: String]] = []
             for name in ["Russian", "Greek", "Hebrew", "Arabic", "French", "German", "Dvorak"] {
                 guard let data = keyboardData(name) else {
                     suite.expect(false, "system keyboard fixture \(name) exists")
@@ -1310,11 +1310,13 @@ enum CommandBarFeatureTests {
                 keyboardMaps.append(map)
                 // Reconstruct the physical keys of an English app name from
                 // real system data, including Latin and non-Latin layouts.
-                let typed = String("terminal".map { intended in
-                    map.keys.sorted { String($0) < String($1) }.first { map[$0] == intended } ?? intended
-                })
-                suite.expect(CommandBarSearch.matches(title: "Terminal", query: typed, layouts: [map]),
-                             "\(name) physical keys recover Terminal")
+                for title in ["Terminal", "Browser"] {
+                    let typed = title.lowercased().map { intended in
+                        map.keys.sorted().first { map[$0] == String(intended) } ?? String(intended)
+                    }.joined()
+                    suite.expect(CommandBarSearch.matches(title: title, query: typed, layouts: [map]),
+                                 "\(name) physical keys recover \(title)")
+                }
             }
             for query in ["еукьш", "ЕУКЬШ", "еукьштфд", "terьш"] {
                 suite.expect(CommandBarSearch.matches(title: "Terminal", query: query, layouts: keyboardMaps),
@@ -1343,6 +1345,8 @@ enum CommandBarFeatureTests {
         } else {
             suite.expect(false, "the US reference keyboard exists")
         }
+        suite.expect(CommandBarSearch.queryAlternatives("لاr", layouts: [["لا": "b", "ل": "g"]]).contains("br"),
+                     "a multi-character key takes precedence over its component characters")
         suite.expect(CommandBarSearch.queryAlternatives("  termi  40% ", layouts: []) == ["termi 40%"]
                      && CommandBarSearch.queryAlternatives("  ", layouts: []) == [""],
                      "ordinary queries and empty queries keep their existing normalization")
