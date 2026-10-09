@@ -3654,6 +3654,13 @@ extension CommandBarService {
             CommandBarEntry(id: "app.textedit", title: "TextEdit", subtitle: "Applications",
                             keywords: "editor", icon: .appIcon(path: "/System/Applications/TextEdit.app"), run: { _ in })
         ]
+        let layouts = TISCreateInputSourceList([kTISPropertyInputSourceType: kTISTypeKeyboardLayout] as CFDictionary, true)!.takeRetainedValue() as! [TISInputSource]
+        func data(_ name: String) -> Data {
+            InputSourceSelection.keyboardLayoutData(layouts.first {
+                InputSourceSelection.inputSourceString($0, property: kTISPropertyInputSourceID) == "com.apple.keylayout." + name
+            }!)!
+        }
+        let recoveryMaps = [InputSourceSelection.keyboardMap(from: data("Russian"), to: data("US"))]
         let output = URL(fileURLWithPath: "build/keyboard-search-screenshots", isDirectory: true)
         try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let cases: [(String, String, Bool)] = [
@@ -3675,7 +3682,7 @@ extension CommandBarService {
             service.query = query
             let candidates = entries.enumerated().map { CommandBarCandidate(index: $0.offset, title: $0.element.title, keywords: $0.element.keywords) }
             let ranked = recover
-                ? CommandBarSearch.rankedIndexes(candidates: candidates, matching: query)
+                ? CommandBarSearch.rankedIndexes(candidates: candidates, matching: query, layouts: recoveryMaps)
                 : candidates.compactMap {
                     CommandBarSearch.score(normalizedTitle: $0.normalizedTitle, normalizedKeywords: $0.normalizedKeywords,
                                            normalizedQuery: CommandBarSearch.normalized(query)) == nil ? nil : $0.index
