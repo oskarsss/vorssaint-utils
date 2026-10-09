@@ -169,16 +169,37 @@ enum CommandBarSearch {
     /// is `termi` on US QWERTY. Keep the literal query first so native names
     /// remain searchable. The system supplies mappings for enabled layouts.
     static func queryAlternatives(_ query: String,
-                                  layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> [String] {
+                                  layouts: [[String: String]] = InputSourceSelection.commandBarKeyboardMaps()) -> [String] {
         var alternatives = [normalized(query)]
         // Remap before accent folding: й, ї and ё carry keyboard identity
         // that the ordinary text normalizer deliberately discards.
         let lowercased = strippingInvisibles(query).lowercased()
         for layout in layouts {
-            let remapped = normalized(String(lowercased.map { layout[$0] ?? $0 }))
+            let remapped = normalized(remapping(lowercased, with: layout))
             if !alternatives.contains(remapped) { alternatives.append(remapped) }
         }
         return alternatives
+    }
+
+    /// A single physical key may produce several characters, such as Arabic
+    /// lam-alef. Consume that sequence together before trying individual keys.
+    private static func remapping(_ query: String, with layout: [String: String]) -> String {
+        let sequences = layout.keys.filter { $0.count > 1 }.sorted {
+            $0.count != $1.count ? $0.count > $1.count : $0 < $1
+        }
+        var result = ""
+        var position = query.startIndex
+        while position < query.endIndex {
+            if let sequence = sequences.first(where: { query[position...].hasPrefix($0) }) {
+                result += layout[sequence]!
+                position = query.index(position, offsetBy: sequence.count)
+            } else {
+                let character = String(query[position])
+                result += layout[character] ?? character
+                position = query.index(after: position)
+            }
+        }
+        return result
     }
 
     /// A leading colon scopes the global search to emoji. The marker is not
@@ -283,7 +304,7 @@ enum CommandBarSearch {
     }
 
     static func matches(title: String, keywords: String = "", query: String,
-                        layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> Bool {
+                        layouts: [[String: String]] = InputSourceSelection.commandBarKeyboardMaps()) -> Bool {
         score(title: title, keywords: keywords, query: query, layouts: layouts) != nil
     }
 
@@ -291,7 +312,7 @@ enum CommandBarSearch {
     /// Whole-query hits on the title dominate, then per-token quality
     /// (whole word > word prefix > substring > subsequence > one typo).
     static func score(title: String, keywords: String = "", query: String,
-                      layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> Int? {
+                      layouts: [[String: String]] = InputSourceSelection.commandBarKeyboardMaps()) -> Int? {
         let title = normalized(title), keywords = normalized(keywords)
         return queryAlternatives(query, layouts: layouts).compactMap {
             score(normalizedTitle: title, normalizedKeywords: keywords, normalizedQuery: $0)
@@ -333,7 +354,7 @@ enum CommandBarSearch {
     /// lead match quality; ties keep the caller's order so equally good rows
     /// stay where the catalog put them.
     static func rankedIndexes(candidates: [CommandBarCandidate], matching query: String,
-                              layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> [Int] {
+                              layouts: [[String: String]] = InputSourceSelection.commandBarKeyboardMaps()) -> [Int] {
         let queries = queryAlternatives(query, layouts: layouts)
         let scored: [(index: Int, priority: Int, literal: Bool, tier: Int, score: Int, position: Int)] = candidates.enumerated()
             .compactMap { position, candidate in
