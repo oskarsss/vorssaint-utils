@@ -133,6 +133,7 @@ private struct NotchCalendarWeekDayButton: View {
     private let colors: [NotchCalendarColor]
     private let hasEvents: Bool
     private let weekday: String
+    private let dayNumber: String
     private let label: String
     @EnvironmentObject private var selection: NotchCalendarTileSelection
     private let accent = Color(red: 1, green: 0.36, blue: 0.39)
@@ -146,6 +147,7 @@ private struct NotchCalendarWeekDayButton: View {
         var calendar = Calendar.current
         calendar.locale = locale
         isToday = calendar.isDate(date, inSameDayAs: now)
+        dayNumber = NotchCalendarSupport.dayNumber(date, locale: locale, calendar: calendar)
         let dayEvents = NotchCalendarSupport.events(events, on: date, calendar: calendar)
         hasEvents = !dayEvents.isEmpty
         colors = dayEvents.reduce(into: [NotchCalendarColor]()) { colors, event in
@@ -163,7 +165,7 @@ private struct NotchCalendarWeekDayButton: View {
                 Text(weekday)
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.white.opacity(0.45))
-                Text(date, format: .dateTime.day())
+                Text(dayNumber)
                     .font(.system(size: 12, weight: isToday || selected ? .bold : .medium))
                     .foregroundStyle(selected && !isToday ? .black : .white)
                     .frame(width: 26, height: 26)

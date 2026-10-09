@@ -53,7 +53,6 @@ final class CalendarMonthCanvasView: NSView {
     private var weekdays: [String] = []
     private var weeks: [Week] = []
     private var renderedEvents: [NotchCalendarEvent] = []
-    private let numberFormatter = DateFormatter()
     private let labelFormatter = DateFormatter()
     private var image: NSImage?
     private var imageSize = CGSize.zero
@@ -103,9 +102,6 @@ final class CalendarMonthCanvasView: NSView {
             setAccessibilityElement(true)
             setAccessibilityLabel(value.month.formatted(.dateTime.month(.wide).year().locale(locale)))
             if localeID != locale.identifier || old == nil {
-                numberFormatter.locale = locale
-                numberFormatter.calendar = calendar
-                numberFormatter.dateFormat = "d"
                 labelFormatter.locale = locale
                 labelFormatter.calendar = calendar
                 labelFormatter.setLocalizedDateFormatFromTemplate("EEEE d MMMM yyyy")
@@ -120,7 +116,8 @@ final class CalendarMonthCanvasView: NSView {
             let month = calendar.dateInterval(of: .month, for: value.month)
             let colors = NotchCalendarSupport.colors(events, on: dates, calendar: calendar)
             days = dates.enumerated().map { index, date in
-                Day(date: date, number: numberFormatter.string(from: date), label: labelFormatter.string(from: date),
+                Day(date: date, number: NotchCalendarSupport.dayNumber(date, locale: locale, calendar: calendar),
+                    label: labelFormatter.string(from: date),
                     today: date == today, selected: date == selected,
                     inMonth: month.map { date >= $0.start && date < $0.end } ?? false, colors: colors[index])
             }

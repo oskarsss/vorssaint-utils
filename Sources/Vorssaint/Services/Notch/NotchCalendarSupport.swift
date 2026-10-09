@@ -55,6 +55,12 @@ struct NotchCalendarChoice: Equatable, Identifiable, Sendable {
 enum NotchCalendarSupport {
     static let countdownLeadTime: TimeInterval = 60 * 60
 
+    /// Date formatting adds suffixes such as 日 or 일 that a small date circle
+    /// clips. Keep its localized number separate from the full accessible date.
+    static func dayNumber(_ date: Date, locale: Locale, calendar: Calendar = .current) -> String {
+        calendar.component(.day, from: date).formatted(.number.locale(locale))
+    }
+
     static func monthDays(containing date: Date, calendar: Calendar = .current) -> [Date] {
         guard let month = calendar.dateInterval(of: .month, for: date) else { return [] }
         let offset = (calendar.component(.weekday, from: month.start) - calendar.firstWeekday + 7) % 7
