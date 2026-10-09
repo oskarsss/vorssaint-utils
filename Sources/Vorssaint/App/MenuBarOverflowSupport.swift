@@ -3,6 +3,44 @@
 import Foundation
 
 enum MenuBarOverflowSupport {
+    enum Layout: String, CaseIterable {
+        case dropdown
+        case menuBar
+
+        static func resolved(_ value: String) -> Self { Self(rawValue: value) ?? .dropdown }
+    }
+
+    struct InlinePlan {
+        let visibleCount: Int
+        let hasMore: Bool
+        let usesMenuOnly: Bool
+        var pageSize: Int { visibleCount }
+        var extraWidth: CGFloat { usesMenuOnly ? 0 : CGFloat(visibleCount) * 24 + (hasMore ? 32 : 0) }
+    }
+
+    /// Keep icons in the right safe segment; reserve one slot for paging
+    /// when they do not all fit. The camera and app menus stay unobstructed.
+    static func inlinePlan(itemCount: Int, freeWidth: CGFloat) -> InlinePlan {
+        func slots(_ width: CGFloat) -> Int { width.isFinite ? max(0, Int(max(0, width) / 24)) : 0 }
+        let right = slots(freeWidth)
+        let count = max(0, itemCount)
+        let paged = count > right
+        let rightCount = min(count, paged ? slots(freeWidth - 32) : right)
+        return InlinePlan(visibleCount: rightCount, hasMore: paged,
+                          usesMenuOnly: right == 0 || (paged && rightCount == 0))
+    }
+
+    static func nextPageStart(current: Int, pageSize: Int, count: Int) -> Int {
+        let next = current + max(1, pageSize)
+        return next >= max(0, count) ? 0 : next
+    }
+
+    static func inlineFreeWidth(rightArea: CGRect, arrowFrame: CGRect) -> CGFloat {
+        guard rightArea.width > 0, arrowFrame.width > 0,
+              arrowFrame.minX >= rightArea.minX, arrowFrame.maxX <= rightArea.maxX else { return 0 }
+        return max(0, arrowFrame.minX - rightArea.minX - 12)
+    }
+
     struct SystemControl: Sendable {
         let id: Int
         let identifier: String
@@ -52,23 +90,4 @@ enum MenuBarOverflowSupport {
         return (previous.filter { present.contains($0) } + current).filter { seen.insert($0).inserted }
     }
 
-    struct Item {
-        let bundle: String
-        let frame: CGRect
-    }
-
-    /// Native visibility is per app. An app with any icon in the visible
-    /// section stays visible; ambiguous/invalid positions are never hidden.
-    static func hiddenBundles(items: [Item], boundaryX: CGFloat, rightToLeft: Bool) -> Set<String> {
-        guard boundaryX.isFinite else { return [] }
-        return Set(Dictionary(grouping: items, by: \.bundle).compactMap { bundle, items in
-            guard !bundle.hasPrefix("com.apple."), items.allSatisfy({ item in
-                let frame = item.frame
-                guard frame.minX.isFinite, frame.maxX.isFinite, frame.width > 0,
-                      frame.height > 0 else { return false }
-                return rightToLeft ? frame.minX > boundaryX : frame.maxX < boundaryX
-            }) else { return nil }
-            return bundle
-        })
-    }
 }

@@ -48,6 +48,9 @@ enum DefaultsKey {
     static let showCountdown = "showCountdownInMenuBar"
     static let menuBarOverflowPlacementGeneration = "menuBarOverflowPlacementGeneration"
     static let menuBarOverflowBundles = "menuBarOverflowBundles"
+    static let menuBarOverflowMonochrome = "menuBarOverflowMonochrome"
+    static let menuBarOverflowOrder = "menuBarOverflowOrder"
+    static let menuBarOverflowLayout = "menuBarOverflowLayout"
     static let menuBarOverflowEnabled = "menuBarOverflowEnabled"
     static let statusItemPlacementGeneration = "statusItemPlacementGeneration"
     static let hasOnboarded = "hasOnboarded"
@@ -1581,6 +1584,9 @@ enum Defaults {
         DefaultsKey.menuBarOverflowPlacementGeneration: 0,
         DefaultsKey.menuBarOverflowBundles: "",
         DefaultsKey.menuBarOverflowEnabled: false,
+        DefaultsKey.menuBarOverflowOrder: "",
+        DefaultsKey.menuBarOverflowLayout: "dropdown",
+        DefaultsKey.menuBarOverflowMonochrome: true,
         DefaultsKey.menuBarHideIconWithMetrics: false,
         DefaultsKey.menuBarIconSymbol: "",
         DefaultsKey.windowLayoutHiddenActions: "",

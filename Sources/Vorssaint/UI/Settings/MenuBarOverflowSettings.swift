@@ -7,6 +7,15 @@ struct MenuBarOverflowSettings: View {
     @AppStorage(DefaultsKey.menuBarOverflowBundles) private var selectedBundles = ""
     @AppStorage(DefaultsKey.menuBarOverflowEnabled) private var enabled = false
 
+    @AppStorage(DefaultsKey.menuBarOverflowLayout) private var layout = "dropdown"
+
+    @AppStorage(DefaultsKey.menuBarOverflowMonochrome) private var monochrome = true
+
+    private var chooserItems: [MenuBarOverflowController.OverflowItem] {
+        let selected = Set(overflow.items.map(\.id))
+        return overflow.items + overflow.availableItems.filter { !selected.contains($0.id) }
+    }
+
     var body: some View {
         SettingsCard(title: "Icon Drawer") {
             SettingsRow(symbol: "chevron.down", title: "Menu bar icons",
@@ -15,24 +24,40 @@ struct MenuBarOverflowSettings: View {
                     .labelsHidden().toggleStyle(.switch)
             }
             if enabled {
+                HStack {
+                    Text("Layout").font(.callout)
+                    Spacer()
+                    Picker("Icon Drawer layout", selection: $layout) {
+                        Text("Dropdown").tag("dropdown")
+                        Text("Menu bar").tag("menuBar")
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(maxWidth: 250)
+                }
+
+                Toggle("Monochrome icons", isOn: $monochrome)
+                    .toggleStyle(.checkbox).font(.callout)
                 DisclosureGroup(isExpanded: $overflow.isChoosingIcons) {
-                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
-                                        GridItem(.flexible(), alignment: .leading)], spacing: 8) {
-                        ForEach(overflow.availableItems) { item in
+                    VStack(spacing: 6) {
+                        ForEach(chooserItems) { item in
                             HStack(spacing: 8) {
                                 Image(nsImage: item.icon).resizable().scaledToFit()
                                     .frame(width: 18, height: 18)
                                 Toggle(item.name, isOn: Binding(
                                     get: { selectedBundles.split(separator: ",").contains(Substring(item.bundle)) },
                                     set: { overflow.setIncluded(item.bundle, included: $0) }
-                                )).toggleStyle(.checkbox)
-                                    .lineLimit(1).help(item.name)
+                                )).toggleStyle(.checkbox).lineLimit(1).help(item.name)
+                                Spacer(minLength: 8)
+                                if let index = overflow.items.firstIndex(where: { $0.id == item.id }) {
+                                    Button { overflow.moveItem(item.id, offset: -1) } label: {
+                                        Image(systemName: "chevron.up")
+                                    }.disabled(index == 0).help("Move earlier in Icon Drawer")
+                                    Button { overflow.moveItem(item.id, offset: 1) } label: {
+                                        Image(systemName: "chevron.down")
+                                    }.disabled(index == overflow.items.count - 1).help("Move later in Icon Drawer")
+                                }
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    }.padding(.vertical, 8)
-                    Text("Includes system controls and icons behind the camera. Requires Accessibility. On macOS 27, icons from the same app move together.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    }.font(.callout).padding(.vertical, 8)
                 } label: {
                     HStack {
                         Text("Choose icons")
@@ -46,9 +71,6 @@ struct MenuBarOverflowSettings: View {
                 }
                 HStack {
                     Button("Open Icon Drawer") { overflow.showDrawer() }
-                    Spacer()
-                    Button("Reset arrow position") { overflow.restoreArrow() }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
                 }.font(.caption)
                 if let message = overflow.message {
                     Text(message).font(.caption).foregroundStyle(.secondary)

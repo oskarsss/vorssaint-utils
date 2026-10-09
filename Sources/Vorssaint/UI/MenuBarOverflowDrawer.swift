@@ -65,11 +65,13 @@ private struct MenuBarOverflowIcon: View {
     let item: MenuBarOverflowController.OverflowItem
     let action: () -> Void
     @State private var hovered = false
+    @AppStorage(DefaultsKey.menuBarOverflowMonochrome) private var monochrome = true
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(nsImage: item.icon).resizable().scaledToFit().frame(width: 24, height: 24)
+                    .saturation(monochrome ? 0 : 1)
                 Text(item.name).font(.system(size: 11)).lineLimit(1)
             }
             .frame(maxWidth: .infinity).frame(height: 54)

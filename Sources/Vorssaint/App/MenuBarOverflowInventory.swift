@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -30,6 +31,36 @@ enum MenuBarOverflowInventory {
         var children: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
         return (children as? [AXUIElement] ?? []).flatMap { menuElements($0, depth: depth + 1) }
+    }
+
+    static func drawerFrame() -> CGRect? {
+        guard let agent = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == menuBarAgentBundle }) else { return nil }
+        let app = AXUIElementCreateApplication(agent.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 0.05)
+        func find(_ element: AXUIElement, depth: Int) -> CGRect? {
+            guard depth < 6 else { return nil }
+            var identifier: CFTypeRef?
+            AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
+            if identifier as? String == "vorssaint.icon-drawer" {
+                var position: CFTypeRef?
+                var size: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &position) == .success,
+                      AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &size) == .success,
+                      let position, let size, CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else { return nil }
+                var point = CGPoint.zero
+                var dimensions = CGSize.zero
+                AXValueGetValue(position as! AXValue, .cgPoint, &point)
+                AXValueGetValue(size as! AXValue, .cgSize, &dimensions)
+                return CGRect(origin: point, size: dimensions)
+            }
+            var children: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success else { return nil }
+            for child in children as? [AXUIElement] ?? [] {
+                if let frame = find(child, depth: depth + 1) { return frame }
+            }
+            return nil
+        }
+        return find(app, depth: 0)
     }
 
     static func read(_ apps: [Application]) -> [Record] {
