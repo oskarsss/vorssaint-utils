@@ -48,7 +48,6 @@ final class MenuBarOverflowController: NSObject, ObservableObject, NSMenuDelegat
     private var nativeMenuMonitor: Any?
     private var nativeMenuLocalMonitor: Any?
     private let images = MenuBarOverflowImages()
-    private let preservedFocus = MenuBarOverflowFocus()
     private var lastMonochrome = true
     private var monochrome: Bool {
         UserDefaults.standard.object(forKey: DefaultsKey.menuBarOverflowMonochrome) as? Bool ?? true
@@ -286,7 +285,6 @@ final class MenuBarOverflowController: NSObject, ObservableObject, NSMenuDelegat
         closeDrawer()
         if let assertion { VSMenuBarVisibilityRelease(assertion) }
         assertion = nil
-        preservedFocus.stop()
         spacerItem?.length = 18
         isCollapsed = false
         isBusy = false
@@ -592,7 +590,6 @@ final class MenuBarOverflowController: NSObject, ObservableObject, NSMenuDelegat
             if let handle {
                 let previous = self.assertion
                 self.assertion = handle
-                self.preservedFocus.start()
                 if let previous { VSMenuBarVisibilityRelease(previous) }
                 completion(true, nil)
             } else {

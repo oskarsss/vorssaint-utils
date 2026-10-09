@@ -6,6 +6,8 @@
 
 // macOS 27 no longer supports oversized status-item spacers. Resolve the
 // menu-bar-only visibility assertion at runtime; missing APIs fail open.
+// This assertion also suppresses unallowlistable extras such as Focus.
+// Explain this OS limitation in settings rather than impersonating their icons.
 // API discovery: Hidden Bar's NativeVisibilityEngine (dwarvesf/hidden).
 static NSError *unavailable(NSString *reason) {
     return [NSError errorWithDomain:@"Vorssaint.MenuBarOverflow" code:1

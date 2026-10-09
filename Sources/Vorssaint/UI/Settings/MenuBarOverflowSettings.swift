@@ -34,6 +34,12 @@ struct MenuBarOverflowSettings: View {
                     .labelsHidden().pickerStyle(.segmented).frame(maxWidth: 250)
                 }
 
+                if #available(macOS 27, *) {
+                    Text("macOS hides the Focus icon and some other system icons while Icon Drawer is enabled. Focus remains available in Control Center. Disable Icon Drawer to restore these icons.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Toggle("Monochrome icons", isOn: $monochrome)
                     .toggleStyle(.checkbox).font(.callout)
                 DisclosureGroup(isExpanded: $overflow.isChoosingIcons) {
