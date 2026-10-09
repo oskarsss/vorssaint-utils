@@ -167,24 +167,14 @@ struct CommandBarCandidate {
 enum CommandBarSearch {
     /// Physical-key alternatives, not transliterations: Russian `еукьш`
     /// is `termi` on US QWERTY. Keep the literal query first so native names
-    /// remain searchable. Only non-Latin keys are replaced; Latin fragments,
-    /// whitespace and numeric arguments survive a mid-query layout switch.
-    private static let keyboardLayouts: [[Character: Character]] = [
-        ("йцукенгшщзхъфывапролджэячсмитьбюё", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
-        ("йцукенгшщзхїфівапролджєячсмитьбюґ", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
-        ("йцукенгшўзх'фывапролджэячсмітьбюё", "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"),
-        ("ςερτυθιοπασδφγηξκλζχψωβνμ", "wertyuiopasdfghjklzxcvbnm"),
-        ("קראטוןםפשדגכעיחלךףזסבהנמצתץ", "ertyuiopasdfghjkl;zxcvbnm,.")
-    ].map { source, target in
-        Dictionary(uniqueKeysWithValues: zip(source, target).filter { !$0.0.isASCII })
-    }
-
-    static func queryAlternatives(_ query: String) -> [String] {
+    /// remain searchable. The system supplies mappings for enabled layouts.
+    static func queryAlternatives(_ query: String,
+                                  layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> [String] {
         var alternatives = [normalized(query)]
         // Remap before accent folding: й, ї and ё carry keyboard identity
         // that the ordinary text normalizer deliberately discards.
         let lowercased = strippingInvisibles(query).lowercased()
-        for layout in keyboardLayouts {
+        for layout in layouts {
             let remapped = normalized(String(lowercased.map { layout[$0] ?? $0 }))
             if !alternatives.contains(remapped) { alternatives.append(remapped) }
         }
@@ -292,16 +282,18 @@ enum CommandBarSearch {
         return rowTitles.contains { normalized($0).contains(typed) } ? 1 : 0
     }
 
-    static func matches(title: String, keywords: String = "", query: String) -> Bool {
-        score(title: title, keywords: keywords, query: query) != nil
+    static func matches(title: String, keywords: String = "", query: String,
+                        layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> Bool {
+        score(title: title, keywords: keywords, query: query, layouts: layouts) != nil
     }
 
     /// Nil when the query does not match; otherwise a comparable score.
     /// Whole-query hits on the title dominate, then per-token quality
     /// (whole word > word prefix > substring > subsequence > one typo).
-    static func score(title: String, keywords: String = "", query: String) -> Int? {
+    static func score(title: String, keywords: String = "", query: String,
+                      layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> Int? {
         let title = normalized(title), keywords = normalized(keywords)
-        return queryAlternatives(query).compactMap {
+        return queryAlternatives(query, layouts: layouts).compactMap {
             score(normalizedTitle: title, normalizedKeywords: keywords, normalizedQuery: $0)
         }.max()
     }
@@ -340,8 +332,9 @@ enum CommandBarSearch {
     /// Indexes of the matching candidates, best first. Deliberate preferences
     /// lead match quality; ties keep the caller's order so equally good rows
     /// stay where the catalog put them.
-    static func rankedIndexes(candidates: [CommandBarCandidate], matching query: String) -> [Int] {
-        let queries = queryAlternatives(query)
+    static func rankedIndexes(candidates: [CommandBarCandidate], matching query: String,
+                              layouts: [[Character: Character]] = InputSourceSelection.commandBarKeyboardMaps()) -> [Int] {
+        let queries = queryAlternatives(query, layouts: layouts)
         let scored: [(index: Int, priority: Int, literal: Bool, tier: Int, score: Int, position: Int)] = candidates.enumerated()
             .compactMap { position, candidate in
                 let matches = queries.enumerated().compactMap { offset, query -> (literal: Bool, tier: Int, score: Int)? in

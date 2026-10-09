@@ -1290,37 +1290,62 @@ enum CommandBarFeatureTests {
                "command bar search ignores accents and case")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "brilho"),
                "a plain word finds its command")
-        for query in ["еукьш", "ЕУКЬШ", "еукьштфд", "terьш"] {
-            suite.expect(CommandBarSearch.matches(title: "Terminal", query: query),
-                         "wrong-layout query \(query) still finds Terminal")
+        let keyboardSources = TISCreateInputSourceList(
+            [kTISPropertyInputSourceType: kTISTypeKeyboardLayout] as CFDictionary, true)?
+            .takeRetainedValue() as? [TISInputSource] ?? []
+        func keyboardData(_ name: String) -> Data? {
+            keyboardSources.first {
+                InputSourceSelection.inputSourceString($0, property: kTISPropertyInputSourceID)
+                    == "com.apple.keylayout." + name
+            }.flatMap(InputSourceSelection.keyboardLayoutData)
         }
-        suite.expect(CommandBarSearch.matches(title: "Open app", keywords: "terminal shell", query: "еукьш"),
-                     "keyboard recovery also searches keywords")
-        suite.expect(CommandBarSearch.matches(title: "Brightness", query: "икшпретуыы")
-                     && CommandBarSearch.matches(title: "Firefox", query: "ашкуащч")
-                     && CommandBarSearch.matches(title: "Keyboard", query: "лунищфкв"),
-                     "key identity survives accent folding of й and ё")
-        suite.expect(CommandBarSearch.matches(title: "Terminal", query: "τερμι")
-                     && CommandBarSearch.matches(title: "Terminal", query: "אקרצן"),
-                     "Greek and Hebrew keyboard positions recover English queries")
-        suite.expect(CommandBarSearch.queryAlternatives("й ї і є ґ").contains("q ] s ' `"),
-                     "Ukrainian keys preserve their QWERTY positions")
-        suite.expect(CommandBarSearch.queryAlternatives("ў і").contains("o b"),
-                     "Belarusian keys preserve their QWERTY positions")
-        suite.expect(CommandBarSearch.matches(title: "Open Terminal", query: "щзут еукьш")
-                     && !CommandBarSearch.matches(title: "Terminal", query: "еукьш music"),
-                     "recovered multiword searches still require every token")
-        let keyboardCandidates = [
-            CommandBarCandidate(index: 0, title: "Terminal", boost: 5000),
-            CommandBarCandidate(index: 1, title: "Еукьш"),
-            CommandBarCandidate(index: 2, title: "Terminal Settings")
-        ]
-        suite.expect(CommandBarSearch.rankedIndexes(candidates: keyboardCandidates, matching: "еукьш") == [1, 0, 2],
-                     "literal native text leads recovered matches and each row appears once")
-        suite.expect(CommandBarSearch.queryAlternatives("  termi  40% ") == ["termi 40%"]
-                     && CommandBarSearch.queryAlternatives("еукьш 40%").contains("termi 40%")
-                     && CommandBarSearch.queryAlternatives("  ") == [""],
-                     "ordinary Latin queries, numeric arguments and empty queries stay intact")
+        if let us = keyboardData("US") {
+            var keyboardMaps: [[Character: Character]] = []
+            for name in ["Russian", "Greek", "Hebrew", "Arabic", "French", "German", "Dvorak"] {
+                guard let data = keyboardData(name) else {
+                    suite.expect(false, "system keyboard fixture \(name) exists")
+                    continue
+                }
+                let map = InputSourceSelection.keyboardMap(from: data, to: us)
+                keyboardMaps.append(map)
+                // Reconstruct the physical keys of an English app name from
+                // real system data, including Latin and non-Latin layouts.
+                let typed = String("terminal".map { intended in
+                    map.keys.sorted { String($0) < String($1) }.first { map[$0] == intended } ?? intended
+                })
+                suite.expect(CommandBarSearch.matches(title: "Terminal", query: typed, layouts: [map]),
+                             "\(name) physical keys recover Terminal")
+            }
+            for query in ["еукьш", "ЕУКЬШ", "еукьштфд", "terьш"] {
+                suite.expect(CommandBarSearch.matches(title: "Terminal", query: query, layouts: keyboardMaps),
+                             "wrong-layout query \(query) still finds Terminal")
+            }
+            suite.expect(CommandBarSearch.matches(title: "Open app", keywords: "terminal shell",
+                                                 query: "еукьш", layouts: keyboardMaps),
+                         "keyboard recovery also searches keywords")
+            suite.expect(CommandBarSearch.matches(title: "Keyboard", query: "лунищфкв", layouts: keyboardMaps),
+                         "key identity survives accent folding of й")
+            suite.expect(CommandBarSearch.matches(title: "Open Terminal", query: "щзут еукьш", layouts: keyboardMaps)
+                         && !CommandBarSearch.matches(title: "Terminal", query: "еукьш music", layouts: keyboardMaps),
+                         "recovered multiword searches still require every token")
+            let keyboardCandidates = [
+                CommandBarCandidate(index: 0, title: "Terminal", boost: 5000),
+                CommandBarCandidate(index: 1, title: "Еукьш"),
+                CommandBarCandidate(index: 2, title: "Terminal Settings")
+            ]
+            suite.expect(CommandBarSearch.rankedIndexes(candidates: keyboardCandidates,
+                                                       matching: "еукьш", layouts: keyboardMaps) == [1, 0, 2],
+                         "literal native text leads recovered matches and each row appears once")
+            suite.expect(CommandBarSearch.queryAlternatives("еукьш 40%", layouts: keyboardMaps).contains("termi 40%"),
+                         "numeric arguments survive keyboard recovery")
+            suite.expect(InputSourceSelection.keyboardMap(from: us, to: us).isEmpty,
+                         "the US keyboard adds no redundant recovery map")
+        } else {
+            suite.expect(false, "the US reference keyboard exists")
+        }
+        suite.expect(CommandBarSearch.queryAlternatives("  termi  40% ", layouts: []) == ["termi 40%"]
+                     && CommandBarSearch.queryAlternatives("  ", layouts: []) == [""],
+                     "ordinary queries and empty queries keep their existing normalization")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "Brilho"),
                "capitalized queries land in the same place")
         suite.expect(CommandBarSearch.matches(title: "Brilho da tela", query: "brlho"),
