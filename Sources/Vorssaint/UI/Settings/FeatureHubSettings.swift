@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-/// The Features hub. One switch per feature, grouped in plain language: off
-/// means the feature disappears from the whole app (Settings, panel, menu
-/// bar, shortcuts) and costs nothing; its configuration is kept for its
-/// return. The Permissions tab is the transparency portal: what each system
+/// The Features hub. Install or uninstall each feature, grouped in plain
+/// language: uninstalling removes it from the whole app (Settings, panel,
+/// menu bar, shortcuts) and stops its work; its configuration is kept for
+/// its return. The Permissions tab is the transparency portal: what each system
 /// permission does, which features use it right now, and a gentle nudge when
 /// one is granted with nothing using it.
 struct FeatureHubSettings: View {
@@ -424,14 +424,15 @@ private struct InstalledShareBar: View {
 
 // MARK: - Feature row
 
-/// Icon, name and one line about the feature; small icons for the
-/// permissions it can use and what it keeps alive; and the install switch.
+/// Icon, name and description; readable permission and energy details;
+/// and an inclusion control that preserves saved behavior choices.
 /// An installed feature with a page of its own opens it from the row.
 private struct FeatureHubRow: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var features = FeatureRuntime.shared
     @State private var confirmingExtensions = false
     @State private var hovering = false
+    @State private var showingMetadata = false
     @State private var preferenceRevision = 0
     let feature: AppFeature
     let hub: FeatureHubStrings
@@ -458,6 +459,28 @@ private struct FeatureHubRow: View {
         let title = feature.hubTitle(l10n.s, hub: hub)
         if feature == .notch { return "\(title). \(hub.experimentalBadge)" }
         return feature.isBeta ? "\(title). \(l10n.s.betaFeatureWarning)" : title
+    }
+
+    private var energyLabel: String {
+        switch feature.energyProfile {
+        case .idle: return hub.energyIdle
+        case .mouse: return hub.energyMouse
+        case .pointer: return hub.energyPointer
+        case .keyboard: return hub.energyKeyboard
+        case .inputs: return hub.energyInputs
+        case .periodic: return hub.energyPeriodic
+        }
+    }
+
+    private var energySymbols: [String] {
+        switch feature.energyProfile {
+        case .idle: return ["leaf"]
+        case .mouse: return ["computermouse"]
+        case .pointer: return ["hand.point.up.left"]
+        case .keyboard: return ["keyboard"]
+        case .inputs: return ["computermouse", "keyboard"]
+        case .periodic: return ["clock.arrow.circlepath"]
+        }
     }
 
     /// The switch reads availability itself, so it only moves once the
@@ -494,6 +517,7 @@ private struct FeatureHubRow: View {
                     .opacity(unsupportedReason == nil ? 1 : 0.4)
                     .saturation(unsupportedReason == nil ? 1 : 0)
             }
+            metadata
             installSwitch
         }
         .padding(.vertical, 7)
@@ -581,6 +605,41 @@ private struct FeatureHubRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    /// Use a readable label instead of a row of tiny, unexplained symbols.
+    private var metadata: some View {
+        let explanation = (feature.permissions.map { $0.name(hub) } + [energyLabel])
+            .joined(separator: "\n")
+        return Button(feature.permissions.isEmpty ? energyLabel : hub.tabPermissions) {
+            showingMetadata.toggle()
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .help(explanation)
+        .accessibilityLabel(explanation)
+        .popover(isPresented: $showingMetadata) {
+            // Symbols differ in width, so a centered icon column keeps the texts aligned.
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+                ForEach(feature.permissions, id: \.self) { permission in
+                    GridRow {
+                        Image(systemName: permission.symbolName)
+                            .gridColumnAlignment(.center)
+                            .accessibilityHidden(true)
+                        Text(permission.name(hub))
+                    }
+                }
+                GridRow {
+                    HStack(spacing: 2) {
+                        ForEach(energySymbols, id: \.self) { Image(systemName: $0) }
+                    }
+                    .accessibilityHidden(true)
+                    Text(energyLabel)
+                }
+            }
+            .padding(14)
+        }
     }
 
     @ViewBuilder
