@@ -177,6 +177,43 @@ enum KeyboardRemapTests {
         }
         suite.expect(KeyboardRemapPreset.capsEscape.configuration.keyRules.first?.target == .key("escape"), "Editor preset moves Escape to Caps Lock")
         suite.expect(KeyboardRemapPreset.capsControl.configuration.keyRules.first?.target == .key("leftControl"), "Terminal preset moves Control to Caps Lock")
+        let presentedPresets = KeyboardRemapPreset.workflowPresets + KeyboardRemapPreset.capsLockPresets
+        suite.expect(Set(presentedPresets) == Set(KeyboardRemapPreset.allCases)
+                && presentedPresets.count == KeyboardRemapPreset.allCases.count,
+                     "Suggestion groups include every preset exactly once")
+        let escape = KeyboardRemapPreset.capsEscape.configuration
+        let escapeTrigger = escape.triggers[0].trigger.code
+        state.reset()
+        suite.expect(state.decide(key: escapeTrigger, down: true, repeatKey: false, flags: [],
+                                 commandLabel: nil, config: escape) == .key(Int64(kVK_Escape), []),
+                     "Caps Escape sends Escape through its action trigger")
+        suite.expect(state.decide(key: escapeTrigger, down: false, repeatKey: false, flags: [],
+                                 commandLabel: nil, config: escape) == .key(Int64(kVK_Escape), []),
+                     "Caps Escape sends the matching Escape release")
+        suite.expect(state.decide(key: escapeTrigger, down: true, repeatKey: false, flags: .maskShift,
+                                 commandLabel: nil, config: escape) == .capsLock,
+                     "Shift-Caps Lock preserves capitals with the Escape preset")
+        suite.expect(state.decide(key: escapeTrigger, down: true, repeatKey: true, flags: .maskShift,
+                                 commandLabel: nil, config: escape) == .swallow,
+                     "Holding Shift-Caps Lock toggles capitals only once")
+        suite.expect(state.decide(key: escapeTrigger, down: false, repeatKey: false, flags: [],
+                                 commandLabel: nil, config: escape) == .swallow,
+                     "Caps toggle release stays swallowed after Shift releases")
+        state.reset()
+        suite.expect(state.decide(key: escapeTrigger, down: true, repeatKey: false, flags: .maskCommand,
+                                 commandLabel: nil, config: escape) == .key(Int64(kVK_Escape), .maskCommand),
+                     "Caps Escape retains other modifiers while reserving Shift for capitals")
+        let installedEscape = escape.previewSuggestion(.capsControl)
+        suite.expect(installedEscape.addedRuleCount == 0 && installedEscape.conflicts.count == 1
+                && installedEscape.configuration == escape,
+                     "Second Caps choice reports a conflict instead of silently replacing Escape")
+        let repeatedEscape = escape.previewSuggestion(.capsEscape)
+        suite.expect(repeatedEscape.addedRuleCount == 0 && repeatedEscape.conflicts.isEmpty,
+                     "Already-installed matching suggestion reports nothing to add without a conflict")
+        let emptySuggestion = KeyboardRemapConfiguration().previewSuggestion(.capsEscape)
+        suite.expect(emptySuggestion.addedRuleCount == 2 && emptySuggestion.conflicts.isEmpty
+                && emptySuggestion.configuration.validationKey == nil,
+                     "Fresh Escape suggestion previews both Escape and the Caps fallback")
         let navigation = KeyboardRemapPreset.pcKeyboard.configuration
         state.reset()
         suite.expect(state.decide(key: Int64(kVK_Home), down: true, repeatKey: false, flags: [], commandLabel: nil, config: navigation)

@@ -87,10 +87,16 @@ enum KeyboardRemapSupport {
                 $0.enabled && $0.source.matches(key: logicalKey, flags: flags, commandLabel: commandLabel)
             }
             var target = rule?.target
-            if target == nil, let trigger,
-               GlobalShortcutModifiers(cgFlags: flags).isEmpty {
-                target = config.keyRules.first { $0.enabled && $0.source == trigger.source.id }?.target
-                if target == nil, trigger.source.id == "capsLock" { target = .capsLock }
+            if target == nil, let trigger {
+                let keyTarget = config.keyRules.first { $0.enabled && $0.source == trigger.source.id }?.target
+                if case .key = keyTarget {
+                    // Physical key replacements retain modifiers; action
+                    // targets still apply only to the unmodified key.
+                    target = keyTarget
+                } else if GlobalShortcutModifiers(cgFlags: flags).isEmpty {
+                    target = keyTarget
+                    if target == nil, trigger.source.id == "capsLock" { target = .capsLock }
+                }
             }
             guard let target else {
                 if trigger != nil { presses[key] = .swallow; return .swallow }

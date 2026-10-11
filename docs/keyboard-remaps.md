@@ -40,25 +40,31 @@ Quit Protection regardless of event-tap installation order.
 ## Suggested remaps
 
 Choose and preview a focused preset rather than installing one combined setup.
+PC-style keyboard and safer quitting appear first. The three Caps Lock alternatives
+are grouped under **Caps Lock choices**. Current setup preview appears above
+suggestions, followed by the editable rules.
 Previews show a From → To table with full key names (Home, End, Left Arrow,
 Command, Shift) instead of compact, ambiguous shortcut symbols:
 
 | Preset | Rules | Use case |
 | --- | --- | --- |
-| Caps Lock → Escape | Caps Lock sends Escape | Vim and editors; replaces normal Caps Lock |
+| Caps Lock → Escape | Caps Lock sends Escape; Shift+Caps Lock toggles capitals | Vim and editors with Caps Lock still available |
 | Caps Lock → Control | Caps Lock becomes left Control | Terminal and Control-heavy shortcuts; replaces normal Caps Lock |
 | Safer quitting | Command+Q → do nothing; Option+Q → Command+Q | Reduce accidental quitting near Command+Tab; replaces the Option+Q character |
 | Caps Lock for languages | Caps Lock → next language; Shift+Caps Lock → normal Caps Lock | Optional language switching without changing Fn or navigation |
 | PC-style keyboard | Fn → left Command; Home/End → line boundaries; Command+Arrow ↔ Option+Arrow for all four arrows, including Shift selection | Command+Left/Right move by word; Option+Left/Right move to line boundaries. Up/Down swap the app’s usual paragraph/document navigation; app support varies |
 
 Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
-not tap-versus-hold behavior. Home/End normally scroll to document boundaries
+not tap-versus-hold behavior. Caps Lock → Control is a native held-modifier
+remap and does not provide a Shift+Caps Lock fallback. Home/End normally scroll to document boundaries
 on macOS; PC-style keyboard changes them to line movement. It also swaps
 Command/Option arrow navigation and changes the usual Fn behavior. Other Control
 shortcuts, Caps Lock, and Delete/Backspace are unchanged.
 
 **Add suggested rules** adds missing sources only. Existing custom rules and
-explicitly disabled choices stay intact. Repeated use does not duplicate rules.
+explicitly disabled choices stay intact. Preview warnings identify sources with
+conflicting rules. If no new rules can be added, the Add button is disabled.
+Repeated use does not duplicate rules.
 To replace an existing Caps Lock choice, edit or remove that rule first; adding
 another preset does not overwrite it. Previewing or cancelling a preset does
 not change the active setup or enable remapping.

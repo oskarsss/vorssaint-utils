@@ -54,6 +54,31 @@ struct KeyboardRemapSettings: View {
                     Text(text(error)).font(.caption).foregroundStyle(.orange)
                 }
             }
+            Section(text("preview")) {
+                if config.isEmpty { Text(text("emptyRules")).foregroundStyle(.secondary) }
+                ForEach(config.keyRules.filter(\.enabled)) { rule in
+                    LabeledContent(KeyboardRemapKey.named(rule.source)?.displayLabel ?? rule.source, value: KeyboardRemapRuleLabel.target(rule.target))
+                }
+                ForEach(config.shortcutRules.filter(\.enabled)) { rule in
+                    LabeledContent(rule.source.label, value: KeyboardRemapRuleLabel.target(rule.target))
+                }
+                Text(enabled ? text("restored") : text("inactive")).font(.caption).foregroundStyle(.secondary)
+                Button(text("clearRules")) { save(KeyboardRemapConfiguration()) }
+                    .disabled(config.keyRules.isEmpty && config.shortcutRules.isEmpty)
+            }
+            Section(text("suggestion")) {
+                Text(text("suggestionNote")).font(.caption).foregroundStyle(.secondary)
+                ForEach(KeyboardRemapPreset.workflowPresets) { preset in
+                    suggestionRow(preset)
+                }
+                DisclosureGroup(text("capsChoices")) {
+                    Text(text("capsChoicesNote")).font(.caption).foregroundStyle(.secondary)
+                    ForEach(KeyboardRemapPreset.capsLockPresets) { preset in
+                        suggestionRow(preset)
+                    }
+                }
+            }
+
             Section(text("keyRules")) {
                 Text(text("keyRulesNote")).font(.caption).foregroundStyle(.secondary)
                 ForEach(config.keyRules) { rule in
@@ -97,32 +122,6 @@ struct KeyboardRemapSettings: View {
                 }
                 Button(text("addShortcutRule")) { editingShortcut = .init(.init(40, [.control, .option]), .none) }
             }
-            Section(text("suggestion")) {
-                Text(text("suggestionNote")).font(.caption).foregroundStyle(.secondary)
-                ForEach(KeyboardRemapPreset.allCases) { preset in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(text(preset.titleKey))
-                            Text(text(preset.noteKey)).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(text("viewSuggestion")) { selectedPreset = preset }
-                            .accessibilityLabel(text("viewSuggestion") + " " + text(preset.titleKey))
-                    }
-                }
-            }
-            Section(text("preview")) {
-                if config.isEmpty { Text(text("emptyRules")).foregroundStyle(.secondary) }
-                ForEach(config.keyRules.filter(\.enabled)) { rule in
-                    LabeledContent(KeyboardRemapKey.named(rule.source)?.displayLabel ?? rule.source, value: KeyboardRemapRuleLabel.target(rule.target))
-                }
-                ForEach(config.shortcutRules.filter(\.enabled)) { rule in
-                    LabeledContent(rule.source.label, value: KeyboardRemapRuleLabel.target(rule.target))
-                }
-                Text(enabled ? text("restored") : text("inactive")).font(.caption).foregroundStyle(.secondary)
-                Button(text("clearRules")) { save(KeyboardRemapConfiguration()) }
-                    .disabled(config.keyRules.isEmpty && config.shortcutRules.isEmpty)
-            }
             Section(text("compatibility")) {
                 Text(text("genericHardware")).font(.caption).foregroundStyle(.secondary)
                 Text(text("genericActions")).font(.caption).foregroundStyle(.secondary)
@@ -159,19 +158,32 @@ struct KeyboardRemapSettings: View {
             }
         }
         .sheet(item: $selectedPreset) { preset in
-            KeyboardRemapPresetPreview(preset: preset) {
+            KeyboardRemapPresetPreview(preset: preset, config: config) {
                 var next = config
                 next.addSuggestion(preset)
                 save(next)
             }
         }
     }
+    private func suggestionRow(_ preset: KeyboardRemapPreset) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(text(preset.titleKey))
+                Text(text(preset.noteKey)).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(text("viewSuggestion")) { selectedPreset = preset }
+                .accessibilityLabel(text("viewSuggestion") + " " + text(preset.titleKey))
+        }
+    }
+
 }
 
 private struct KeyboardRemapPresetPreview: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var l10n = L10n.shared
     let preset: KeyboardRemapPreset
+    let config: KeyboardRemapConfiguration
     let onAdd: () -> Void
 
     private func text(_ key: String) -> String {
@@ -187,7 +199,18 @@ private struct KeyboardRemapPresetPreview: View {
             } else {
                 rulesGrid
             }
-            Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
+            let preview = config.previewSuggestion(preset)
+            if !preview.conflicts.isEmpty {
+                Label(text("suggestionConflict"), systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                Text(preview.conflicts.map(\.readableLabel).joined(separator: ", "))
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            if let error = preview.configuration.validationKey {
+                Text(text(error)).font(.caption).foregroundStyle(.orange)
+            }
+            Text(text(preview.addedRuleCount == 0 ? "suggestionNothing" : "suggestionMerge"))
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(text("cancel")) { dismiss() }
                 Spacer()
@@ -196,6 +219,7 @@ private struct KeyboardRemapPresetPreview: View {
                     dismiss()
                 }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(preview.addedRuleCount == 0 || preview.configuration.validationKey != nil)
             }
         }.padding(24).frame(width: 560)
     }

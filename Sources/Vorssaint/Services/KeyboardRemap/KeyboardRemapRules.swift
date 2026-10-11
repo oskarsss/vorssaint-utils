@@ -197,7 +197,15 @@ struct KeyboardRemapConfiguration: Equatable {
     static let triggerKeys = ["f19", "f20", "f17", "f16", "f15", "f14", "f13"].compactMap(KeyboardRemapKey.named)
     var actionSources: [KeyboardRemapKey] {
         var result = keyRules.filter(\.enabled).compactMap { rule -> KeyboardRemapKey? in
-            if case .key = rule.target { return nil }
+            if case .key(let destination) = rule.target {
+                // Route Caps Lock through a distinguishable action key when a
+                // shortcut needs its physical identity. Modifier destinations
+                // stay in HID so held Control/Command still affect mouse chords.
+                guard rule.source == "capsLock",
+                      KeyboardRemapKey.named(destination)?.isModifier == false,
+                      shortcutRules.contains(where: { $0.enabled && $0.source.keyCode == Int64(kVK_CapsLock) })
+                else { return nil }
+            }
             return KeyboardRemapKey.named(rule.source)
         }
         for rule in shortcutRules where rule.enabled {
@@ -224,8 +232,9 @@ struct KeyboardRemapConfiguration: Equatable {
         Array(zip(actionSources, availableTriggers)).map { ($0.0, $0.1) }
     }
     var mappings: [SuperKeyMapping] {
+        let actionIDs = Set(actionSources.map(\.id))
         let plain = keyRules.filter(\.enabled).compactMap { rule -> SuperKeyMapping? in
-            guard case .key(let id) = rule.target, let from = KeyboardRemapKey.named(rule.source),
+            guard !actionIDs.contains(rule.source), case .key(let id) = rule.target, let from = KeyboardRemapKey.named(rule.source),
                   let to = KeyboardRemapKey.named(id) else { return nil }
             return .init(source: from.usage, destination: to.usage)
         }
@@ -252,7 +261,8 @@ struct KeyboardRemapConfiguration: Equatable {
         for rule in activeShortcuts {
             if rule.source.keyCode == Int64(kVK_CapsLock),
                let existing = activeKeys.first(where: { $0.source == "capsLock" }),
-               case .key = existing.target { return "sourceRemapped" }
+               case .key(let destination) = existing.target,
+               KeyboardRemapKey.named(destination)?.isModifier != false { return "sourceRemapped" }
             if !valid(rule.target, keyRule: false) || !valid(rule.source, source: true) { return "invalidRule" }
             if case .shortcut(let chord) = rule.target, chord == rule.source { return "invalidRule" }
         }
@@ -294,9 +304,43 @@ struct KeyboardRemapConfiguration: Equatable {
         for rule in suggestion.shortcutRules where !shortcutRules.contains(where: { Self.overlap($0.source, rule.source) }) {
             if rule.source.keyCode == Int64(kVK_CapsLock),
                let existing = keyRules.first(where: { $0.enabled && $0.source == "capsLock" }),
-               case .key = existing.target { continue }
+               case .key(let destination) = existing.target,
+               KeyboardRemapKey.named(destination)?.isModifier != false { continue }
             shortcutRules.append(rule)
         }
+    }
+
+    struct SuggestionPreview {
+        let configuration: KeyboardRemapConfiguration
+        let conflicts: [KeyboardRemapChord]
+        let addedRuleCount: Int
+    }
+
+    func previewSuggestion(_ preset: KeyboardRemapPreset) -> SuggestionPreview {
+        let suggested = preset.configuration
+        var conflicts: [KeyboardRemapChord] = []
+        for rule in suggested.keyRules {
+            if let existing = keyRules.first(where: { $0.source == rule.source }),
+               !existing.enabled || existing.target != rule.target,
+               let key = KeyboardRemapKey.named(rule.source) {
+                conflicts.append(.init(key.code))
+            }
+        }
+        for rule in suggested.shortcutRules {
+            if let existing = shortcutRules.first(where: { Self.overlap($0.source, rule.source) }) {
+                if !existing.enabled || existing.target != rule.target { conflicts.append(rule.source) }
+            } else if rule.source.keyCode == Int64(kVK_CapsLock),
+                      let existing = keyRules.first(where: { $0.enabled && $0.source == "capsLock" }),
+                      case .key(let destination) = existing.target,
+                      KeyboardRemapKey.named(destination)?.isModifier != false {
+                conflicts.append(rule.source)
+            }
+        }
+        var next = self
+        next.addSuggestion(preset)
+        return SuggestionPreview(configuration: next, conflicts: conflicts,
+                                 addedRuleCount: next.keyRules.count + next.shortcutRules.count
+                                     - keyRules.count - shortcutRules.count)
     }
 
     private static func overlap(_ first: KeyboardRemapChord, _ second: KeyboardRemapChord) -> Bool {
@@ -309,6 +353,8 @@ struct KeyboardRemapConfiguration: Equatable {
 /// Focused alternatives, never installed automatically or combined as a default.
 enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
     case capsEscape, capsControl, saferQuit, pcKeyboard, capsLanguages
+    static let workflowPresets: [Self] = [.pcKeyboard, .saferQuit]
+    static let capsLockPresets: [Self] = [.capsEscape, .capsControl, .capsLanguages]
     var id: String { rawValue }
     var titleKey: String { "preset_" + rawValue }
     var noteKey: String { titleKey + "_note" }
@@ -317,6 +363,7 @@ enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
         switch self {
         case .capsEscape:
             result.keyRules = [.init("capsLock", .key("escape"))]
+            result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]
         case .capsControl:
             result.keyRules = [.init("capsLock", .key("leftControl"))]
         case .saferQuit:
