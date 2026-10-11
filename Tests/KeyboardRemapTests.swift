@@ -8,6 +8,7 @@ import Foundation
 enum KeyboardRemapTests {
     static var fullConfiguration: KeyboardRemapConfiguration {
         var config = KeyboardRemapPreset.pcKeyboard.configuration
+        config.addSuggestion(.capsLanguages)
         config.shortcutRules += KeyboardRemapPreset.saferQuit.configuration.shortcutRules
         config.shortcutRules.append(.init(.init(17, .option, character: "t"), .application("com.apple.Terminal")))
         return config
@@ -186,8 +187,8 @@ enum KeyboardRemapTests {
         let arrows = KeyboardRemapPreset.pcKeyboard.configuration
         suite.expect(arrows.mappings.contains(SuperKeyMapping(source: KeyboardRemapKey.named("fn")!.usage,
                                                               destination: KeyboardRemapKey.named("leftCommand")!.usage))
-                && Set(arrows.keyRules.map(\.source)) == ["fn", "capsLock"],
-                     "PC keyboard combines Fn Command with Caps Lock languages and leaves other physical keys unchanged")
+                && Set(arrows.keyRules.map(\.source)) == ["fn"],
+                     "PC keyboard puts Command on Fn and leaves other physical keys unchanged")
         for key: Int64 in [123, 124, 125, 126] {
             for (input, output): (CGEventFlags, CGEventFlags) in [
                 (.maskCommand, .maskAlternate), (.maskAlternate, .maskCommand),
@@ -218,8 +219,18 @@ enum KeyboardRemapTests {
         customArrows.shortcutRules = [customArrow]
         customArrows.addSuggestion(.pcKeyboard)
         suite.expect(customArrows.shortcutRules.first == customArrow
-                && customArrows.shortcutRules.count == 21,
+                && customArrows.shortcutRules.count == 20,
                      "Adding arrow navigation preserves an existing disabled arrow rule")
+        suite.expect(!arrows.shortcutRules.contains { $0.source.keyCode == Int64(kVK_CapsLock) },
+                     "PC keyboard leaves Caps Lock shortcuts unchanged")
+        let languages = KeyboardRemapPreset.capsLanguages.configuration
+        suite.expect(languages.keyRules.count == 1 && languages.keyRules.first?.source == "capsLock"
+                && languages.keyRules.first?.target == .inputSource,
+                     "Language switching only remaps Caps Lock, leaving Fn unchanged")
+        state.reset()
+        suite.expect(state.decide(key: languages.triggers[0].trigger.code, down: true, repeatKey: false,
+                                 flags: .maskShift, commandLabel: nil, config: languages) == .capsLock,
+                     "Separate language suggestion preserves Shift-Caps Lock for capitals")
         let safeQuit = KeyboardRemapPreset.saferQuit.configuration
         state.reset()
         suite.expect(state.decide(key: 12, down: true, repeatKey: false, flags: .maskCommand, commandLabel: "q", config: safeQuit) == .swallow,

@@ -308,7 +308,7 @@ struct KeyboardRemapConfiguration: Equatable {
 
 /// Focused alternatives, never installed automatically or combined as a default.
 enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
-    case capsEscape, capsControl, saferQuit, pcKeyboard
+    case capsEscape, capsControl, saferQuit, pcKeyboard, capsLanguages
     var id: String { rawValue }
     var titleKey: String { "preset_" + rawValue }
     var noteKey: String { titleKey + "_note" }
@@ -324,9 +324,11 @@ enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
                 .init(.init(12, .command, character: "q"), .none),
                 .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q")))
             ]
-        case .pcKeyboard:
-            result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
+        case .capsLanguages:
+            result.keyRules = [.init("capsLock", .inputSource)]
             result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]
+        case .pcKeyboard:
+            result.keyRules = [.init("fn", .key("leftCommand"))]
             for modifiers: GlobalShortcutModifiers in [[], .shift] {
                 result.shortcutRules.append(.init(.init(Int64(kVK_Home), modifiers),
                     .shortcut(.init(Int64(kVK_LeftArrow), modifiers.union(.command)))))

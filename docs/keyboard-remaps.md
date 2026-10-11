@@ -48,13 +48,14 @@ Command, Shift) instead of compact, ambiguous shortcut symbols:
 | Caps Lock → Escape | Caps Lock sends Escape | Vim and editors; replaces normal Caps Lock |
 | Caps Lock → Control | Caps Lock becomes left Control | Terminal and Control-heavy shortcuts; replaces normal Caps Lock |
 | Safer quitting | Command+Q → do nothing; Option+Q → Command+Q | Reduce accidental quitting near Command+Tab; replaces the Option+Q character |
-| PC-style keyboard | Fn → left Command; Caps Lock → next language; Shift+Caps Lock → normal Caps Lock; Home/End → line boundaries; Command+Arrow ↔ Option+Arrow for all four arrows, including Shift selection | Command+Left/Right move by word; Option+Left/Right move to line boundaries. Up/Down swap the app’s usual paragraph/document navigation; app support varies |
+| Caps Lock for languages | Caps Lock → next language; Shift+Caps Lock → normal Caps Lock | Optional language switching without changing Fn or navigation |
+| PC-style keyboard | Fn → left Command; Home/End → line boundaries; Command+Arrow ↔ Option+Arrow for all four arrows, including Shift selection | Command+Left/Right move by word; Option+Left/Right move to line boundaries. Up/Down swap the app’s usual paragraph/document navigation; app support varies |
 
 Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
 not tap-versus-hold behavior. Home/End normally scroll to document boundaries
 on macOS; PC-style keyboard changes them to line movement. It also swaps
 Command/Option arrow navigation and changes the usual Fn behavior. Other Control
-shortcuts and Delete/Backspace are unchanged.
+shortcuts, Caps Lock, and Delete/Backspace are unchanged.
 
 **Add suggested rules** adds missing sources only. Existing custom rules and
 explicitly disabled choices stay intact. Repeated use does not duplicate rules.
