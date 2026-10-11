@@ -47,9 +47,8 @@ Command, Shift) instead of compact, ambiguous shortcut symbols:
 | --- | --- | --- |
 | Caps Lock → Escape | Caps Lock sends Escape | Vim and editors; replaces normal Caps Lock |
 | Caps Lock → Control | Caps Lock becomes left Control | Terminal and Control-heavy shortcuts; replaces normal Caps Lock |
-| PC-style Home / End | Home/End send Command+Left/Right; Shift selects | Familiar line navigation on full-size keyboards; app support varies |
 | Safer quitting | Command+Q → do nothing; Option+Q → Command+Q | Reduce accidental quitting near Command+Tab; replaces the Option+Q character |
-| Fn and languages | Fn → left Command; Caps Lock → next language; Shift+Caps Lock → normal Caps Lock | Optional example for multilingual Mac users |
+| PC-style keyboard | Fn → left Command; Caps Lock → next language; Shift+Caps Lock → normal Caps Lock; Home/End → line boundaries; Command+Arrow ↔ Option+Arrow for all four arrows, including Shift selection | Command+Left/Right move by word; Option+Left/Right move to line boundaries. Up/Down swap the app’s usual paragraph/document navigation; app support varies |
 
 Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
 not tap-versus-hold behavior. Home/End normally scroll to document boundaries

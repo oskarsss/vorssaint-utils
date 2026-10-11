@@ -26,6 +26,8 @@ struct KeyboardRemapKey: Identifiable, Equatable {
         case "end": return KeyboardRemapStrings.text("endKey")
         case "leftArrow": return KeyboardRemapStrings.text("leftArrowKey")
         case "rightArrow": return KeyboardRemapStrings.text("rightArrowKey")
+        case "upArrow": return KeyboardRemapStrings.text("upArrowKey")
+        case "downArrow": return KeyboardRemapStrings.text("downArrowKey")
         case "leftCommand", "rightCommand", "leftControl", "rightControl", "leftOption", "rightOption", "leftShift", "rightShift":
             let side = id.hasPrefix("left") ? "left" : "right"
             let name = String(id.dropFirst(side.count)).lowercased() + "Key"
@@ -306,7 +308,7 @@ struct KeyboardRemapConfiguration: Equatable {
 
 /// Focused alternatives, never installed automatically or combined as a default.
 enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
-    case capsEscape, capsControl, lineNavigation, saferQuit, fnLanguages
+    case capsEscape, capsControl, saferQuit, pcKeyboard
     var id: String { rawValue }
     var titleKey: String { "preset_" + rawValue }
     var noteKey: String { titleKey + "_note" }
@@ -317,21 +319,32 @@ enum KeyboardRemapPreset: String, CaseIterable, Identifiable {
             result.keyRules = [.init("capsLock", .key("escape"))]
         case .capsControl:
             result.keyRules = [.init("capsLock", .key("leftControl"))]
-        case .lineNavigation:
+        case .saferQuit:
+            result.shortcutRules = [
+                .init(.init(12, .command, character: "q"), .none),
+                .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q")))
+            ]
+        case .pcKeyboard:
+            result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
+            result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]
             for modifiers: GlobalShortcutModifiers in [[], .shift] {
                 result.shortcutRules.append(.init(.init(Int64(kVK_Home), modifiers),
                     .shortcut(.init(Int64(kVK_LeftArrow), modifiers.union(.command)))))
                 result.shortcutRules.append(.init(.init(Int64(kVK_End), modifiers),
                     .shortcut(.init(Int64(kVK_RightArrow), modifiers.union(.command)))))
             }
-        case .saferQuit:
-            result.shortcutRules = [
-                .init(.init(12, .command, character: "q"), .none),
-                .init(.init(12, .option, character: "q"), .shortcut(.init(12, .command, character: "q")))
-            ]
-        case .fnLanguages:
-            result.keyRules = [.init("fn", .key("leftCommand")), .init("capsLock", .inputSource)]
-            result.shortcutRules = [.init(.init(Int64(kVK_CapsLock), .shift), .capsLock)]
+            for key in [kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow] {
+                for selection: GlobalShortcutModifiers in [[], .shift] {
+                    for (source, destination): (GlobalShortcutModifiers, GlobalShortcutModifiers) in [
+                        (.command, .option), (.option, .command)
+                    ] {
+                        result.shortcutRules.append(.init(
+                            .init(Int64(key), source.union(selection)),
+                            .shortcut(.init(Int64(key), destination.union(selection)))))
+                    }
+                }
+            }
+
         }
         return result
     }

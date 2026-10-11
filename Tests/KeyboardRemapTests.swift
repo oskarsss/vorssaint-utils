@@ -7,7 +7,7 @@ import Foundation
 
 enum KeyboardRemapTests {
     static var fullConfiguration: KeyboardRemapConfiguration {
-        var config = KeyboardRemapPreset.fnLanguages.configuration
+        var config = KeyboardRemapPreset.pcKeyboard.configuration
         config.shortcutRules += KeyboardRemapPreset.saferQuit.configuration.shortcutRules
         config.shortcutRules.append(.init(.init(17, .option, character: "t"), .application("com.apple.Terminal")))
         return config
@@ -31,6 +31,7 @@ enum KeyboardRemapTests {
         var state = KeyboardRemapSupport.State()
         suite.expect(KeyboardRemapConfiguration().isEmpty, "Fresh configurations start without remaps")
         var config = fullConfiguration
+        config.shortcutRules.removeAll { [Int64(kVK_Home), Int64(kVK_End)].contains($0.source.keyCode) }
         func key(_ code: Int64, _ flags: CGEventFlags = [], down: Bool = true, repeatKey: Bool = false) -> KeyboardRemapSupport.Action {
             state.decide(key: code, down: down, repeatKey: repeatKey, flags: flags,
                          commandLabel: code == 12 ? "q" : (code == 17 ? "t" : nil), config: config)
@@ -123,17 +124,17 @@ enum KeyboardRemapTests {
         let encodedShortcuts = KeyboardRemapConfiguration.encode(generic.shortcutRules)
         let decodedShortcuts: [KeyboardRemapShortcutRule]? = KeyboardRemapConfiguration.decode(encodedShortcuts)
         suite.expect(decodedShortcuts == generic.shortcutRules, "Shortcut rules, apps, and enabled choices round trip")
-        generic.addSuggestion(.fnLanguages)
+        generic.addSuggestion(.pcKeyboard)
         suite.expect(generic.keyRules.first?.source == "rightOption", "Suggestion preserves custom key ordering")
         let count = generic.keyRules.count + generic.shortcutRules.count
-        generic.addSuggestion(.fnLanguages)
+        generic.addSuggestion(.pcKeyboard)
         suite.expect(generic.keyRules.count + generic.shortcutRules.count == count, "Adding suggestion twice does not duplicate rules")
         var customized = KeyboardRemapConfiguration()
         customized.keyRules = [.init("fn", .key("leftControl")), .init("capsLock", .key("escape"))]
         var customQuit = KeyboardRemapShortcutRule(.init(12, .command), .shortcut(.init(53)))
         customQuit.enabled = false
         customized.shortcutRules = [customQuit]
-        customized.addSuggestion(.fnLanguages)
+        customized.addSuggestion(.pcKeyboard)
         suite.expect(customized.keyRules.first?.target == .key("leftControl"), "Suggestion does not replace a different Fn destination")
         suite.expect(customized.shortcutRules.first == customQuit, "Suggestion preserves disabled choices")
         suite.expect(customized.shortcutRules.filter { $0.source.keyCode == 12 && $0.source.modifiers == GlobalShortcutModifiers.command.rawValue }.count == 1, "Adding a preset leaves custom quitting rules untouched")
@@ -175,13 +176,50 @@ enum KeyboardRemapTests {
         }
         suite.expect(KeyboardRemapPreset.capsEscape.configuration.keyRules.first?.target == .key("escape"), "Editor preset moves Escape to Caps Lock")
         suite.expect(KeyboardRemapPreset.capsControl.configuration.keyRules.first?.target == .key("leftControl"), "Terminal preset moves Control to Caps Lock")
-        let navigation = KeyboardRemapPreset.lineNavigation.configuration
+        let navigation = KeyboardRemapPreset.pcKeyboard.configuration
         state.reset()
         suite.expect(state.decide(key: Int64(kVK_Home), down: true, repeatKey: false, flags: [], commandLabel: nil, config: navigation)
                      == .key(Int64(kVK_LeftArrow), .maskCommand), "Home preset moves to line start")
         _ = state.decide(key: Int64(kVK_Home), down: false, repeatKey: false, flags: [], commandLabel: nil, config: navigation)
         suite.expect(state.decide(key: Int64(kVK_End), down: true, repeatKey: false, flags: .maskShift, commandLabel: nil, config: navigation)
                      == .key(Int64(kVK_RightArrow), [.maskCommand, .maskShift]), "Shift-End preset selects to line end")
+        let arrows = KeyboardRemapPreset.pcKeyboard.configuration
+        suite.expect(arrows.mappings.contains(SuperKeyMapping(source: KeyboardRemapKey.named("fn")!.usage,
+                                                              destination: KeyboardRemapKey.named("leftCommand")!.usage))
+                && Set(arrows.keyRules.map(\.source)) == ["fn", "capsLock"],
+                     "PC keyboard combines Fn Command with Caps Lock languages and leaves other physical keys unchanged")
+        for key: Int64 in [123, 124, 125, 126] {
+            for (input, output): (CGEventFlags, CGEventFlags) in [
+                (.maskCommand, .maskAlternate), (.maskAlternate, .maskCommand),
+                ([.maskCommand, .maskShift], [.maskAlternate, .maskShift]),
+                ([.maskAlternate, .maskShift], [.maskCommand, .maskShift])
+            ] {
+                state.reset()
+                suite.expect(state.decide(key: key, down: true, repeatKey: false, flags: input,
+                                          commandLabel: nil, config: arrows) == .key(key, output),
+                             "Arrow navigation swaps Command and Option while preserving Shift")
+                suite.expect(state.decide(key: key, down: true, repeatKey: true, flags: input,
+                                          commandLabel: nil, config: arrows) == .key(key, output),
+                             "Holding an arrow repeats the translated shortcut")
+                suite.expect(state.decide(key: key, down: false, repeatKey: false, flags: [],
+                                          commandLabel: nil, config: arrows) == .key(key, output),
+                             "Arrow release keeps translated modifiers even when the modifier is released first")
+            }
+            for flags: CGEventFlags in [[], .maskShift, .maskControl, [.maskCommand, .maskAlternate]] {
+                state.reset()
+                suite.expect(state.decide(key: key, down: true, repeatKey: false, flags: flags,
+                                          commandLabel: nil, config: arrows) == .pass,
+                             "Arrow navigation leaves bare arrows and other modifier combinations unchanged")
+            }
+        }
+        var customArrows = KeyboardRemapConfiguration()
+        var customArrow = KeyboardRemapShortcutRule(.init(123, .command), .none)
+        customArrow.enabled = false
+        customArrows.shortcutRules = [customArrow]
+        customArrows.addSuggestion(.pcKeyboard)
+        suite.expect(customArrows.shortcutRules.first == customArrow
+                && customArrows.shortcutRules.count == 21,
+                     "Adding arrow navigation preserves an existing disabled arrow rule")
         let safeQuit = KeyboardRemapPreset.saferQuit.configuration
         state.reset()
         suite.expect(state.decide(key: 12, down: true, repeatKey: false, flags: .maskCommand, commandLabel: "q", config: safeQuit) == .swallow,

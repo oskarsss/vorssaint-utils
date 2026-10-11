@@ -182,24 +182,11 @@ private struct KeyboardRemapPresetPreview: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(text(preset.titleKey)).font(.title2)
             Text(text(preset.noteKey)).foregroundStyle(.secondary)
-            let suggested = preset.configuration
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
-                GridRow {
-                    Text(text("from")).font(.caption).foregroundStyle(.secondary)
-                    Color.clear.frame(width: 16, height: 1)
-                    Text(text("to")).font(.caption).foregroundStyle(.secondary)
-                }
-                Divider().gridCellColumns(3)
-                ForEach(suggested.keyRules) { rule in
-                    previewRow(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source, target: rule.target)
-                }
-                ForEach(suggested.shortcutRules) { rule in
-                    previewRow(rule.source.readableLabel, target: rule.target)
-                }
+            if preset == .pcKeyboard {
+                ScrollView { rulesGrid }.frame(height: 360)
+            } else {
+                rulesGrid
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             Text(text("suggestionMerge")).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(text("cancel")) { dismiss() }
@@ -211,6 +198,28 @@ private struct KeyboardRemapPresetPreview: View {
                     .keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 560)
+    }
+
+    @ViewBuilder
+    private var rulesGrid: some View {
+        let suggested = preset.configuration
+        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
+            GridRow {
+                Text(text("from")).font(.caption).foregroundStyle(.secondary)
+                Color.clear.frame(width: 16, height: 1)
+                Text(text("to")).font(.caption).foregroundStyle(.secondary)
+            }
+            Divider().gridCellColumns(3)
+            ForEach(suggested.keyRules) { rule in
+                previewRow(KeyboardRemapKey.named(rule.source)?.readableLabel ?? rule.source, target: rule.target)
+            }
+            ForEach(suggested.shortcutRules) { rule in
+                previewRow(rule.source.readableLabel, target: rule.target)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func previewRow(_ source: String, target: KeyboardRemapTarget) -> some View {
