@@ -52,8 +52,9 @@ Command, Shift) instead of compact, ambiguous shortcut symbols:
 
 Caps-to-Escape and Caps-to-Control are alternatives. These are fixed key remaps,
 not tap-versus-hold behavior. Home/End normally scroll to document boundaries
-on macOS; this preset changes them to line movement. Existing Control/Option
-combinations remain available. The Fn preset changes the usual Fn behavior.
+on macOS; PC-style keyboard changes them to line movement. It also swaps
+Command/Option arrow navigation and changes the usual Fn behavior. Other Control
+shortcuts and Delete/Backspace are unchanged.
 
 **Add suggested rules** adds missing sources only. Existing custom rules and
 explicitly disabled choices stay intact. Repeated use does not duplicate rules.
