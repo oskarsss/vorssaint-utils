@@ -722,9 +722,8 @@ enum RecorderSupport {
 
     // MARK: - GIF
 
-    /// A GIF holds every frame uncompressed while it is being written, so the
-    /// only real defence against a recording that eats the memory of the
-    /// machine is to keep the frame count and the picture small on purpose.
+    /// GIF frames are encoded individually; size bounds the memory needed by
+    /// the color quantizer for a single picture, independent of clip length.
     enum GIFSize: String, CaseIterable {
         case small, medium, large
 
@@ -742,27 +741,16 @@ enum RecorderSupport {
     }
 
     static let gifFrameRates = [8, 12, 15]
-    static let maximumGIFFrames = 300
 
     static func sanitizedGIFFrameRate(_ raw: Int) -> Int {
         gifFrameRates.contains(raw) ? raw : 12
     }
 
     static func gifFrameCount(duration: Double, fps: Int) -> Int {
-        guard duration > 0, fps > 0 else { return 0 }
-        return max(1, Int((duration * Double(fps)).rounded(.down)))
-    }
-
-    /// Whether a clip fits inside the frame budget at the chosen rate, and
-    /// how long it would have to be to fit. Answering this before the person
-    /// commits is the difference between a clear limit and a hang.
-    static func gifFitsBudget(duration: Double, fps: Int) -> Bool {
-        gifFrameCount(duration: duration, fps: fps) <= maximumGIFFrames
-    }
-
-    static func maximumGIFSeconds(fps: Int) -> Double {
-        guard fps > 0 else { return 0 }
-        return Double(maximumGIFFrames) / Double(fps)
+        guard duration.isFinite, duration > 0, fps > 0 else { return 0 }
+        let count = (duration * Double(fps)).rounded(.down)
+        guard count.isFinite, count < Double(Int.max) else { return 0 }
+        return max(1, Int(count))
     }
 
     /// GIF delay below 100 ms is silently clamped by readers unless the
