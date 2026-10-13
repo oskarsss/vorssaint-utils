@@ -511,8 +511,6 @@ enum RecorderFeatureTests {
         suite.expect([Double.nan, .infinity, -1, 0, Double.greatestFiniteMagnitude].allSatisfy {
             RecorderSupport.gifFrameCount(duration: $0, fps: 12) == 0
         }, "invalid and unrepresentable GIF durations cannot overflow the frame count")
-        suite.expect(RecorderSupport.gifDelay(fps: 10) == 0.1,
-               "the frame delay is the reciprocal of the rate")
         let gifSize = RecorderSupport.gifOutputSize(source: CGSize(width: 2940, height: 1912),
                                                     size: .medium)
         suite.expect(max(gifSize.width, gifSize.height) <= RecorderSupport.GIFSize.medium.longEdge

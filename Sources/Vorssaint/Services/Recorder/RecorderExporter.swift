@@ -542,9 +542,9 @@ final class RecorderExporter {
 
     // MARK: - GIF
 
-    /// Sample the edited timeline and encode each frame independently into a
-    /// disk-backed GIF. Neither decoded frames nor the complete encoded file
-    /// accumulate in memory as the recording gets longer.
+    /// Sample the edited timeline and encode it chunk by chunk into a
+    /// disk-backed GIF. Decoded frames never exceed one chunk and the encoded
+    /// file is not held in memory, however long the recording gets.
     private func exportGIF(asset: AVURLAsset,
                            videoTrack: AVAssetTrack,
                            pointerURL: URL,

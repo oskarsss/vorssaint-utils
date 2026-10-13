@@ -9,9 +9,11 @@ import Foundation
 /// and the next export can sweep it without an age guess or a PID reuse race.
 /// Live exports in other processes are protected by their own locks.
 final class RecorderGIFWorkspace {
+    /// A process without a bundle, such as the test binary, keeps its scratch
+    /// under its own name instead of in the app's folder.
     static var root: URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.vorssaint.utils",
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName,
                                     isDirectory: true)
             .appendingPathComponent("GIF Exports", isDirectory: true)
     }

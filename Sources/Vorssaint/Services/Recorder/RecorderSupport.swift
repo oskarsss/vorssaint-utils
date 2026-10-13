@@ -722,8 +722,8 @@ enum RecorderSupport {
 
     // MARK: - GIF
 
-    /// GIF frames are encoded individually; size bounds the memory needed by
-    /// the color quantizer for a single picture, independent of clip length.
+    /// GIF frames are encoded a chunk at a time, so the picture size and the
+    /// chunk length bound the memory an export needs, whatever its length.
     enum GIFSize: String, CaseIterable {
         case small, medium, large
 
@@ -751,12 +751,6 @@ enum RecorderSupport {
         let count = (duration * Double(fps)).rounded(.down)
         guard count.isFinite, count < Double(Int.max) else { return 0 }
         return max(1, Int(count))
-    }
-
-    /// GIF delay below 100 ms is silently clamped by readers unless the
-    /// unclamped key is written too, so anything above 10 fps needs both.
-    static func gifDelay(fps: Int) -> Double {
-        1 / Double(max(1, fps))
     }
 
     static func gifOutputSize(source: CGSize, size: GIFSize) -> CGSize {
