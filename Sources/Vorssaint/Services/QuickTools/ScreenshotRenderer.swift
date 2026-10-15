@@ -24,6 +24,17 @@ enum ScreenshotRenderer {
         return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: 1)
     }
 
+    /// A mark's own color, custom or preset.
+    static func color(_ annotation: ScreenshotSupport.Annotation, alpha: CGFloat = 1) -> CGColor {
+        let c = ScreenshotSupport.components(of: annotation)
+        return CGColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: alpha)
+    }
+
+    static func nsColor(_ annotation: ScreenshotSupport.Annotation) -> NSColor {
+        let c = ScreenshotSupport.components(of: annotation)
+        return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: 1)
+    }
+
     static func fontSize(for textSize: Int, scale: CGFloat) -> CGFloat {
         CGFloat(textSize) * scale
     }
@@ -56,6 +67,12 @@ enum ScreenshotRenderer {
     /// White on dark marks and near black on white or yellow ones.
     static func contrastColor(for id: ScreenshotSupport.ColorID) -> NSColor {
         ScreenshotSupport.prefersDarkContrast(id)
+            ? NSColor(srgbRed: 0.09, green: 0.09, blue: 0.11, alpha: 1)
+            : .white
+    }
+
+    static func contrastColor(for annotation: ScreenshotSupport.Annotation) -> NSColor {
+        ScreenshotSupport.prefersDarkContrast(annotation)
             ? NSColor(srgbRed: 0.09, green: 0.09, blue: 0.11, alpha: 1)
             : .white
     }
@@ -105,12 +122,12 @@ enum ScreenshotRenderer {
                                    within: replaced)
                 }
             case .redact:
-                context.setFillColor(color(annotation.color))
+                context.setFillColor(color(annotation))
                 context.fill(annotation.rect)
             case .highlight:
                 context.saveGState()
                 context.setBlendMode(.multiply)
-                context.setFillColor(color(annotation.color, alpha: 0.42))
+                context.setFillColor(color(annotation, alpha: 0.42))
                 context.fill(annotation.rect)
                 context.restoreGState()
             case .rect:
@@ -183,15 +200,15 @@ enum ScreenshotRenderer {
             break
         case .translucent:
             context.addPath(path)
-            context.setFillColor(color(annotation.color, alpha: 0.22))
+            context.setFillColor(color(annotation, alpha: 0.22))
             context.fillPath()
         case .solid:
             context.addPath(path)
-            context.setFillColor(color(annotation.color))
+            context.setFillColor(color(annotation))
             context.fillPath()
         }
         context.addPath(outline)
-        context.setStrokeColor(color(annotation.color))
+        context.setStrokeColor(color(annotation))
         context.setLineWidth(annotation.stroke.width * scale)
         context.setLineJoin(.round)
         context.setLineCap(.round)
@@ -333,7 +350,7 @@ enum ScreenshotRenderer {
         context.saveGState()
         applyShadow(context, scale: scale, enabled: shadowsEnabled)
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        context.setStrokeColor(color(annotation.color))
+        context.setStrokeColor(color(annotation))
         context.setLineWidth(width)
         context.setLineCap(.round)
         context.beginPath()
@@ -349,7 +366,7 @@ enum ScreenshotRenderer {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12.5 * scale, weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: contrastColor(for: annotation.color),
+            .foregroundColor: contrastColor(for: annotation),
         ]
         let textSize = label.size(withAttributes: attributes)
         let pill = CGRect(x: (start.x + end.x) / 2 - textSize.width / 2 - 7 * scale,
@@ -358,7 +375,7 @@ enum ScreenshotRenderer {
                           height: textSize.height + 6 * scale)
         context.addPath(CGPath(roundedRect: pill, cornerWidth: pill.height / 2,
                                cornerHeight: pill.height / 2, transform: nil))
-        context.setFillColor(color(annotation.color))
+        context.setFillColor(color(annotation))
         context.fillPath()
         let previous = NSGraphicsContext.current
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
@@ -379,7 +396,7 @@ enum ScreenshotRenderer {
         let width = annotation.stroke.width * scale
         context.saveGState()
         applyShadow(context, scale: scale, enabled: shadowsEnabled)
-        context.setStrokeColor(color(annotation.color))
+        context.setStrokeColor(color(annotation))
         context.setLineWidth(width)
         context.setLineCap(.round)
         context.beginPath()
@@ -406,8 +423,8 @@ enum ScreenshotRenderer {
 
         context.saveGState()
         applyShadow(context, scale: scale, enabled: shadowsEnabled)
-        context.setStrokeColor(color(annotation.color))
-        context.setFillColor(color(annotation.color))
+        context.setStrokeColor(color(annotation))
+        context.setFillColor(color(annotation))
         context.setLineWidth(width)
         context.setLineJoin(.round)
         context.setLineCap(.round)
@@ -439,7 +456,7 @@ enum ScreenshotRenderer {
         guard annotation.points.count > 1 else { return }
         context.saveGState()
         applyShadow(context, scale: scale, enabled: shadowsEnabled)
-        context.setStrokeColor(color(annotation.color))
+        context.setStrokeColor(color(annotation))
         context.setLineWidth(annotation.stroke.width * scale)
         context.setLineJoin(.round)
         context.setLineCap(.round)
@@ -474,7 +491,7 @@ enum ScreenshotRenderer {
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: style == .label
-                ? contrastColor(for: annotation.color) : nsColor(annotation.color),
+                ? contrastColor(for: annotation) : nsColor(annotation),
         ]
         context.saveGState()
         if shadowsEnabled {
@@ -496,7 +513,7 @@ enum ScreenshotRenderer {
             let corner = min(pill.height / 2, size * 0.32)
             context.addPath(CGPath(roundedRect: pill, cornerWidth: corner, cornerHeight: corner,
                                    transform: nil))
-            context.setFillColor(color(annotation.color))
+            context.setFillColor(color(annotation))
             context.fillPath()
         }
         // NSAttributedString draws in an unflipped space; flip locally.
@@ -507,7 +524,7 @@ enum ScreenshotRenderer {
             // draws outline without fill, and half of it hides under the fill.
             var outline = attributes
             outline[.foregroundColor] = NSColor.clear
-            outline[.strokeColor] = contrastColor(for: annotation.color)
+            outline[.strokeColor] = contrastColor(for: annotation)
             outline[.strokeWidth] = 24
             annotation.text.draw(at: origin, withAttributes: outline)
         }
@@ -541,14 +558,14 @@ enum ScreenshotRenderer {
         context.setLineJoin(.round)
         context.strokePath()
         context.addPath(outline)
-        context.setFillColor(color(annotation.color))
+        context.setFillColor(color(annotation))
         context.fillPath()
         context.endTransparencyLayer()
         context.restoreGState()
 
         let label = "\(annotation.number)"
         let font = NSFont.systemFont(ofSize: diameter * 0.52, weight: .bold)
-        let textColor = contrastColor(for: annotation.color)
+        let textColor = contrastColor(for: annotation)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         let size = label.size(withAttributes: attributes)
         let previous = NSGraphicsContext.current

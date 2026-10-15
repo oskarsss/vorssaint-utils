@@ -1761,6 +1761,63 @@ enum ScreenshotSupport {
         color == .white || color == .yellow
     }
 
+    /// Any sRGB color picked from the screen or the color panel, used in
+    /// place of a preset. Stored as `#RRGGBB`, so what is saved is exactly
+    /// what draws.
+    struct CustomColor: Equatable {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        init(red: Double, green: Double, blue: Double) {
+            // Rounded to what the stored hex can carry, so a color read back
+            // from defaults compares equal to the one that was saved.
+            func channel(_ value: Double) -> Double {
+                (min(max(value.isFinite ? value : 0, 0), 1) * 255).rounded() / 255
+            }
+            self.red = channel(red)
+            self.green = channel(green)
+            self.blue = channel(blue)
+        }
+
+        init?(storage: String?) {
+            var hex = (storage ?? "").trimmingCharacters(in: .whitespaces)
+            if hex.hasPrefix("#") { hex.removeFirst() }
+            guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
+            self.init(red: Double((value >> 16) & 0xFF) / 255,
+                      green: Double((value >> 8) & 0xFF) / 255,
+                      blue: Double(value & 0xFF) / 255)
+        }
+
+        var storage: String {
+            String(format: "#%02X%02X%02X",
+                   Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+        }
+
+        var components: (red: Double, green: Double, blue: Double) {
+            (red, green, blue)
+        }
+
+        /// Light colors take dark text, by relative luminance, so a pale
+        /// custom label stays readable the way white and yellow do.
+        var prefersDarkContrast: Bool {
+            func linear(_ value: Double) -> Double {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+            return luminance > 0.45
+        }
+    }
+
+    /// The color a mark draws in: its custom color when it has one.
+    static func components(of annotation: Annotation) -> (red: Double, green: Double, blue: Double) {
+        annotation.customColor?.components ?? annotation.color.components
+    }
+
+    static func prefersDarkContrast(_ annotation: Annotation) -> Bool {
+        annotation.customColor?.prefersDarkContrast ?? prefersDarkContrast(annotation.color)
+    }
+
     static func randomScribbleSeed() -> UInt64 {
         UInt64.random(in: UInt64.min...UInt64.max)
     }
@@ -1818,6 +1875,8 @@ enum ScreenshotSupport {
         var points: [CGPoint]
         var text: String
         var color: ColorID
+        /// Overrides `color` when set.
+        var customColor: CustomColor?
         var stroke: StrokeID
         var textSize: Int
         var blurLevel: Int
@@ -1839,6 +1898,7 @@ enum ScreenshotSupport {
              points: [CGPoint] = [],
              text: String = "",
              color: ColorID = .red,
+             customColor: CustomColor? = nil,
              stroke: StrokeID = .medium,
              textSize: Int = ScreenshotSupport.defaultTextSize,
              blurLevel: Int = BlurStrength.defaultLevel,
@@ -1856,6 +1916,7 @@ enum ScreenshotSupport {
             self.points = points
             self.text = text
             self.color = color
+            self.customColor = customColor
             self.stroke = stroke
             self.textSize = textSize
             self.blurLevel = blurLevel

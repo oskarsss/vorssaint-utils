@@ -3044,6 +3044,53 @@ enum ScreenshotFeatureTests {
                 && ScreenshotSupport.TextStyleID.sanitized(nil) == .plain
                 && Defaults.registeredDefaults[DefaultsKey.screenshotLastSloppy] as? Bool == false,
                "unknown fill and text styles fall back to the plain look")
+
+        // Custom colors round-trip through their stored hex and draw as picked.
+        typealias CustomColor = ScreenshotSupport.CustomColor
+        let teal = CustomColor(red: 0.1, green: 0.6, blue: 0.55)
+        suite.expect(CustomColor(storage: teal.storage) == teal
+                && CustomColor(storage: "#0A84FF")?.storage == "#0A84FF"
+                && CustomColor(storage: "0a84ff")?.storage == "#0A84FF",
+               "a custom color survives being saved and read back")
+        suite.expect(CustomColor(storage: nil) == nil && CustomColor(storage: "") == nil
+                && CustomColor(storage: "#12345") == nil && CustomColor(storage: "#GGGGGG") == nil,
+               "an empty or malformed saved color is ignored")
+        suite.expect(CustomColor(red: 2, green: -1, blue: .nan).storage == "#FF0000",
+               "out of range channels clamp instead of wrapping")
+        suite.expect(CustomColor(red: 0.95, green: 0.95, blue: 0.7).prefersDarkContrast
+                && !CustomColor(red: 0.1, green: 0.15, blue: 0.4).prefersDarkContrast,
+               "pale custom colors take dark text and deep ones white")
+        let customMark = ScreenshotSupport.Annotation(tool: .rect, color: .red, customColor: teal)
+        suite.expect(ScreenshotSupport.components(of: customMark) == teal.components
+                && ScreenshotSupport.components(of: ScreenshotSupport.Annotation(tool: .rect, color: .blue))
+                    == ScreenshotSupport.ColorID.blue.components,
+               "a mark draws in its custom color and otherwise in its preset")
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.screenshotCustomColor] as? String == ""
+                && Defaults.registeredDefaults[DefaultsKey.screenshotUsesCustomColor] as? Bool == false,
+               "a fresh setup starts on the presets with no custom color")
+        let customContext = CGContext(data: nil, width: 20, height: 20, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        customContext?.setFillColor(CGColor(gray: 1, alpha: 1))
+        customContext?.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+        let pickedGreen = CustomColor(red: 0, green: 1, blue: 0)
+        if let plain = customContext?.makeImage(),
+           let painted = ScreenshotRenderer.renderExport(
+            baseImage: plain,
+            annotations: [ScreenshotSupport.Annotation(tool: .redact,
+                                                       rect: CGRect(x: 0, y: 0, width: 20, height: 20),
+                                                       color: .red, customColor: pickedGreen)],
+            blurSources: ScreenshotRenderer.BlurSources(image: plain), scale: 1,
+            annotationShadowsEnabled: false, watermark: ScreenshotSupport.WatermarkStyle(),
+            watermarkImage: nil, style: ScreenshotSupport.BackdropStyle(), fill: .none,
+            downscaleTo1x: false)?.image,
+           let data = painted.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
+            let pixel = 10 * painted.bytesPerRow + 10 * 4
+            suite.expect(bytes[pixel] < 40 && bytes[pixel + 1] > 200,
+                   "an exported mark uses its custom color, not the preset under it")
+        } else {
+            suite.expect(false, "a custom color test capture renders")
+        }
         suite.expect(ScreenshotSupport.Tool.shortcutTool(number: 1,
                                                    orderRaw: nil,
                                                    enabled: true) == .select

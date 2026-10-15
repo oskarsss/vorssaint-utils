@@ -81,6 +81,7 @@ struct MetricsTests {
                 ScreenshotPreviewHoverTests.run(suite)
                 ScreenshotWatermarkTests.run(suite)
                 ScreenshotFeatureTests.run(suite)
+                ScreenshotCustomColorTests.run(suite)
                 ScreenshotArrowEditingTests.run(suite)
                 ScreenshotCompositingTests.run(suite)
                 ScreenshotShareCompletionTests.run(suite)

@@ -54,6 +54,13 @@ def main():
                     for prefix in ["    private func beginSelectDrag(", "    private func continueSelectDrag(",
                                    "    func selectedAnnotationOwns(", "    func hitTest("])
           + "}\n}\n")
+    write("ScreenshotCustomColor.swift", "import AppKit\nextension ScreenshotCustomColorTests {\n"
+          + "final class Model: Fixture {\n"
+          + "".join(declaration(screenshot_editor, prefix).replace("private func", "func", 1)
+                    for prefix in ["    var activeCustomColor:", "    func pickPresetColor(",
+                                   "    func pickCustomColor(", "    func beginColorPanelSession()",
+                                   "    private func applyStyleToSelection()"])
+          + "}\n}\n")
     recorder = "Sources/Vorssaint/Services/Recorder/ScreenRecorderService.swift"
     write("RecorderPreparation.swift", "import Foundation\nextension RecorderPreparationTests {\n"
           + "final class Service: Fixture {\n"

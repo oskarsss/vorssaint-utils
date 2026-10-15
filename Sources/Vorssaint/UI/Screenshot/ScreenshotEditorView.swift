@@ -584,7 +584,7 @@ struct ScreenshotEditorView: View {
             TextField(strings.textPlaceholder, text: $editingText)
                 .textFieldStyle(.plain)
                 .font(.system(size: fontSize, weight: .semibold))
-                .foregroundStyle(Color(nsColor: ScreenshotRenderer.nsColor(annotation.color)))
+                .foregroundStyle(Color(nsColor: ScreenshotRenderer.nsColor(annotation)))
                 .focused($textFieldFocused)
                 .frame(minWidth: 130)
                 .padding(.horizontal, 6)
@@ -1057,6 +1057,10 @@ struct ScreenshotEditorView: View {
                     ForEach(ScreenshotSupport.ColorID.allCases, id: \.self) { colorID in
                         colorDot(colorID)
                     }
+                    if let custom = model.customColor {
+                        customColorDot(custom)
+                    }
+                    moreColorsMenu
                 }
                 Divider().frame(height: 16)
                 if showsTextSizeControls {
@@ -1259,10 +1263,10 @@ struct ScreenshotEditorView: View {
     }
 
     private func colorDot(_ colorID: ScreenshotSupport.ColorID) -> some View {
-        let selected = model.color == colorID
+        let selected = !model.usesCustomColor && model.color == colorID
         return Button {
             withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) {
-                model.color = colorID
+                model.pickPresetColor(colorID)
             }
         } label: {
             ZStack {
@@ -1283,6 +1287,76 @@ struct ScreenshotEditorView: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel(strings.colorLabel)
+    }
+
+    /// The last picked custom color, drawn like a preset dot so it can be
+    /// picked again after a preset.
+    private func customColorDot(_ custom: ScreenshotSupport.CustomColor) -> some View {
+        let selected = model.usesCustomColor
+        return Button {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) {
+                model.pickCustomColor(custom)
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(Color(.sRGB, red: custom.red, green: custom.green, blue: custom.blue,
+                                opacity: 1))
+                    .frame(width: 17, height: 17)
+                    .overlay(
+                        Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5)
+                    )
+                if selected {
+                    Circle()
+                        .strokeBorder(Color.primary.opacity(0.9), lineWidth: 1.5)
+                        .frame(width: 23, height: 23)
+                }
+            }
+            .frame(width: 24, height: 24)
+            .scaleEffect(selected ? 1.05 : 1)
+        }
+        .buttonStyle(.borderless)
+        .screenshotSafeHelp(strings.customColorLabel + " " + custom.storage)
+        .accessibilityLabel(strings.customColorLabel)
+        .accessibilityValue(custom.storage)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// Any color: the system eyedropper, which reads the capture on screen
+    /// too, or the full color panel.
+    private var moreColorsMenu: some View {
+        Menu {
+            Button {
+                controller.pickColorFromScreen()
+            } label: {
+                Label(strings.pickColorFromScreen, systemImage: "eyedropper")
+            }
+            Button {
+                controller.showColorPanel()
+            } label: {
+                Label(strings.moreColors, systemImage: "paintpalette")
+            }
+        } label: {
+            Circle()
+                .fill(AngularGradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red],
+                                      center: .center))
+                .frame(width: 17, height: 17)
+                .overlay(
+                    Image(systemName: "plus")
+                        .font(.system(size: 8.5, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.45), radius: 1)
+                )
+                .overlay(
+                    Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5)
+                )
+                .frame(width: 24, height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .screenshotSafeHelp(strings.moreColors)
+        .accessibilityLabel(strings.moreColors)
     }
 
     /// Line-weight glyphs with three increasing stroke widths.

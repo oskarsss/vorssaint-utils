@@ -50,6 +50,22 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             applyStyleToSelection()
         }
     }
+    /// The last color picked from the screen or the color panel, kept for
+    /// its swatch while a preset is in use.
+    @Published private(set) var customColor: ScreenshotSupport.CustomColor? {
+        didSet {
+            UserDefaults.standard.set(customColor?.storage ?? "",
+                                      forKey: DefaultsKey.screenshotCustomColor)
+            applyStyleToSelection()
+        }
+    }
+    /// Whether new and picked marks take `customColor` instead of `color`.
+    @Published private(set) var usesCustomColor: Bool {
+        didSet {
+            UserDefaults.standard.set(usesCustomColor, forKey: DefaultsKey.screenshotUsesCustomColor)
+            applyStyleToSelection()
+        }
+    }
     @Published var stroke: ScreenshotSupport.StrokeID {
         didSet {
             UserDefaults.standard.set(stroke.rawValue, forKey: DefaultsKey.screenshotLastStroke)
@@ -242,6 +258,11 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         tool = lastTool
         color = ScreenshotSupport.ColorID.sanitized(
             defaults.string(forKey: DefaultsKey.screenshotLastColor))
+        let savedCustomColor = ScreenshotSupport.CustomColor(
+            storage: defaults.string(forKey: DefaultsKey.screenshotCustomColor))
+        customColor = savedCustomColor
+        usesCustomColor = savedCustomColor != nil
+            && defaults.bool(forKey: DefaultsKey.screenshotUsesCustomColor)
         stroke = ScreenshotSupport.StrokeID.sanitized(
             defaults.string(forKey: DefaultsKey.screenshotLastStroke))
         textSize = ScreenshotSupport.sanitizedTextSize(
@@ -615,8 +636,46 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
 
     /// Applies color, thickness, text size, or arrow style changes to the
     /// selected annotation.
+    /// The custom color new marks take, or nil while a preset is in use.
+    var activeCustomColor: ScreenshotSupport.CustomColor? {
+        usesCustomColor ? customColor : nil
+    }
+
+    /// Switches to a preset. Leaving the custom color and picking the preset
+    /// are one edit to the selected mark, not two.
+    func pickPresetColor(_ id: ScreenshotSupport.ColorID) {
+        deferringStyleApply = true
+        usesCustomColor = false
+        color = id
+        deferringStyleApply = false
+        applyStyleToSelection()
+    }
+
+    /// Switches to a custom color. `continuous` marks a change from the color
+    /// panel, where dragging across the wheel sends one change after another;
+    /// those coalesce into a single undo step per mark.
+    func pickCustomColor(_ custom: ScreenshotSupport.CustomColor, continuous: Bool = false) {
+        deferringStyleApply = true
+        customColor = custom
+        usesCustomColor = true
+        deferringStyleApply = false
+        coalescesColorEdits = continuous
+        applyStyleToSelection()
+        coalescesColorEdits = false
+    }
+
+    /// A newly shown color panel starts a new undo step.
+    func beginColorPanelSession() {
+        coalescedColorEditID = nil
+    }
+
+    private var deferringStyleApply = false
+    private var coalescesColorEdits = false
+    private var coalescedColorEditID: UUID?
+
     private func applyStyleToSelection() {
-        guard let selectedID,
+        guard !deferringStyleApply,
+              let selectedID,
               let index = annotations.firstIndex(where: { $0.id == selectedID })
         else { return }
         let arrowStyleChanged = annotations[index].tool == .arrow
@@ -631,7 +690,9 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         let usesStroke = style.stroke != nil
         let strokeChanged = usesStroke && annotations[index].stroke != stroke
         let usesColor = style.color != nil
-        let colorChanged = usesColor && annotations[index].color != color
+        let colorChanged = usesColor
+            && (annotations[index].color != color
+                || annotations[index].customColor != activeCustomColor)
         let fillChanged = style.fill != nil && annotations[index].fill != shapeFill
         let sloppyChanged = style.sloppy != nil && annotations[index].sloppy != sloppy
         guard colorChanged
@@ -642,8 +703,15 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                 || fillChanged
                 || sloppyChanged
         else { return }
-        registerUndo()
-        if usesColor { annotations[index].color = color }
+        let continuesColorEdit = coalescesColorEdits && coalescedColorEditID == selectedID
+            && colorChanged && !strokeChanged && !arrowStyleChanged && !textSizeChanged
+            && !textStyleChanged && !fillChanged && !sloppyChanged
+        if !continuesColorEdit { registerUndo() }
+        coalescedColorEditID = coalescesColorEdits ? selectedID : nil
+        if usesColor {
+            annotations[index].color = color
+            annotations[index].customColor = activeCustomColor
+        }
         if usesStroke { annotations[index].stroke = stroke }
         if fillChanged { annotations[index].fill = shapeFill }
         if sloppyChanged {
@@ -709,7 +777,15 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
     /// Unused values remain available as defaults for the next new mark.
     private func syncControls(to annotation: ScreenshotSupport.Annotation) {
         let style = ScreenshotSupport.selectionStyle(for: annotation)
-        if let color = style.color { self.color = color }
+        if let color = style.color {
+            self.color = color
+            if let custom = annotation.customColor {
+                customColor = custom
+                usesCustomColor = true
+            } else {
+                usesCustomColor = false
+            }
+        }
         if let stroke = style.stroke { self.stroke = stroke }
         if let textSize = style.textSize { self.textSize = textSize }
         if let blurLevel = style.blurLevel { self.blurLevel = blurLevel }
@@ -760,7 +836,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             registerUndo()
             dragRegistered = true
             let annotation = ScreenshotSupport.Annotation(
-                tool: tool, points: [point, point], color: color, stroke: stroke,
+                tool: tool, points: [point, point], color: color, customColor: activeCustomColor, stroke: stroke,
                 arrowStyle: arrowStyle, sloppy: tool == .line && sloppy)
             annotations.append(annotation)
             draftID = annotation.id
@@ -768,7 +844,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             registerUndo()
             dragRegistered = true
             let annotation = ScreenshotSupport.Annotation(
-                tool: tool, points: [point], color: color, stroke: stroke)
+                tool: tool, points: [point], color: color, customColor: activeCustomColor, stroke: stroke)
             annotations.append(annotation)
             draftID = annotation.id
         case .rect, .ellipse, .highlight, .pixelate, .redact, .spotlight, .magnifier:
@@ -777,7 +853,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             dragRegistered = true
             let annotation = ScreenshotSupport.Annotation(
                 tool: tool, rect: CGRect(origin: point, size: .zero),
-                color: color, stroke: stroke, blurLevel: blurLevel,
+                color: color, customColor: activeCustomColor, stroke: stroke, blurLevel: blurLevel,
                 blurStyle: blurStyle, blurTextOnly: blurTextOnly,
                 fill: shapeFill, sloppy: tool.drawsSloppy && sloppy)
             annotations.append(annotation)
@@ -878,7 +954,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                     tool: .counter,
                     rect: CGRect(x: dragStart.x, y: dragStart.y, width: 0, height: 0),
                     points: [dragStart, point],
-                    color: color, stroke: stroke, number: 1)
+                    color: color, customColor: activeCustomColor, stroke: stroke, number: 1)
                 annotations.append(annotation)
                 annotations = ScreenshotSupport.renumberingCounters(annotations)
                 draftID = annotation.id
@@ -951,7 +1027,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             if selectExistingAnnotation(at: point) { return }
             registerUndo()
             var annotation = ScreenshotSupport.Annotation(
-                tool: .text, color: color, stroke: stroke, textSize: textSize,
+                tool: .text, color: color, customColor: activeCustomColor, stroke: stroke, textSize: textSize,
                 textStyle: textStyle)
             annotation.rect = ScreenshotRenderer.textBounds("", at: point, textSize: textSize,
                                                             scale: scale, style: textStyle)
@@ -971,7 +1047,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                                                      side: side,
                                                      within: bounds),
                 text: sticker.rawValue,
-                color: color,
+                color: color, customColor: activeCustomColor,
                 stroke: stroke)
             annotations.append(annotation)
             selectedID = annotation.id
@@ -995,7 +1071,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             let annotation = ScreenshotSupport.Annotation(
                 tool: .counter,
                 rect: CGRect(x: point.x, y: point.y, width: 0, height: 0),
-                color: color, stroke: stroke, number: 1)
+                color: color, customColor: activeCustomColor, stroke: stroke, number: 1)
             annotations.append(annotation)
             annotations = ScreenshotSupport.renumberingCounters(annotations)
             selectedID = annotation.id
@@ -1745,6 +1821,67 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
 
     /// Shows the detected code's content in the shared result panel; the
     /// editor stays open behind it so the capture can still be worked on.
+    // MARK: Custom colors
+
+    private var colorSampler: NSColorSampler?
+    /// The editor the shared color panel reports to; another editor that
+    /// shows the panel takes it over.
+    private static weak var colorPanelOwner: ScreenshotEditorController?
+
+    /// The system eyedropper: any pixel on screen, the capture in this
+    /// window included, becomes the custom color.
+    func pickColorFromScreen() {
+        let sampler = NSColorSampler()
+        colorSampler = sampler
+        sampler.show { [weak self] picked in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.colorSampler = nil
+                guard let picked, let custom = Self.customColor(from: picked) else { return }
+                self.model.pickCustomColor(custom)
+            }
+        }
+    }
+
+    /// The system color panel, starting from the color in use. Its changes
+    /// arrive continuously while the wheel is dragged.
+    func showColorPanel() {
+        let panel = NSColorPanel.shared
+        // Detach before seeding the panel, so the seed is not reported back.
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.showsAlpha = false
+        panel.isContinuous = true
+        let current = model.activeCustomColor?.components ?? model.color.components
+        panel.color = NSColor(srgbRed: current.red, green: current.green, blue: current.blue, alpha: 1)
+        model.beginColorPanelSession()
+        panel.setTarget(self)
+        panel.setAction(#selector(colorPanelChanged(_:)))
+        Self.colorPanelOwner = self
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func colorPanelChanged(_ sender: NSColorPanel) {
+        guard let custom = Self.customColor(from: sender.color) else { return }
+        model.pickCustomColor(custom, continuous: true)
+    }
+
+    private func releaseColorPanel() {
+        guard Self.colorPanelOwner === self else { return }
+        Self.colorPanelOwner = nil
+        let panel = NSColorPanel.shared
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.orderOut(nil)
+    }
+
+    static func customColor(from color: NSColor) -> ScreenshotSupport.CustomColor? {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return nil }
+        return ScreenshotSupport.CustomColor(red: Double(srgb.redComponent),
+                                             green: Double(srgb.greenComponent),
+                                             blue: Double(srgb.blueComponent))
+    }
+
     func showQRResult() {
         guard let reading = model.qrReading else { return }
         QRResultController.shared.show(reading: reading)
@@ -1764,6 +1901,8 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        releaseColorPanel()
+        colorSampler = nil
         if let pointerMonitor {
             NSEvent.removeMonitor(pointerMonitor)
             self.pointerMonitor = nil
