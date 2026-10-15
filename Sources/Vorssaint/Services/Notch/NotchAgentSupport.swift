@@ -238,8 +238,8 @@ enum NotchAgentSupport {
         cards.flatMap { card -> [NotchAgentTile] in
             switch card {
             case .limits: return providers.filter(\.reportsLimits).map { NotchAgentTile(card: .limits, provider: $0) }
-            // Banked resets belong to a Codex account.
-            case .resets: return providers.contains(.codex) ? [NotchAgentTile(card: .resets, provider: .codex)] : []
+            // Banked resets belong to a Claude or a Codex account.
+            case .resets: return providers.filter { $0 == .claude || $0 == .codex }.map { NotchAgentTile(card: .resets, provider: $0) }
             default: return [NotchAgentTile(card: card, provider: nil)]
             }
         }
