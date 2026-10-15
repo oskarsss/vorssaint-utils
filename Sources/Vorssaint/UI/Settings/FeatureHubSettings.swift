@@ -72,23 +72,28 @@ struct FeatureHubSettings: View {
         // layout could keep redoing itself until Settings froze.
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(hub.pageTitle).font(.title2.bold())
-                    Text(tab == .features ? hub.intro : hub.permissionsIntro)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Picker(hub.pageTitle, selection: $tab) {
-                    Text(hub.tabFeatures).tag(Tab.features)
-                    Text(hub.tabPermissions).tag(Tab.permissions)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                // The restart notice comes first, whichever tab is open:
-                // uninstalling anything makes it impossible to miss.
-                if features.needsRestartToUnload {
-                    restartCard
+                // Keep one header child in the lazy stack. Inserting or
+                // removing the restart notice as an offscreen lazy child
+                // invalidates its visible range: the page jumps or goes
+                // blank until the next scroll event.
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(hub.pageTitle).font(.title2.bold())
+                        Text(tab == .features ? hub.intro : hub.permissionsIntro)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Picker(hub.pageTitle, selection: $tab) {
+                        Text(hub.tabFeatures).tag(Tab.features)
+                        Text(hub.tabPermissions).tag(Tab.permissions)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    // The restart notice comes first on either tab.
+                    if features.needsRestartToUnload {
+                        restartCard
+                    }
                 }
                 if tab == .features {
                     catalogControls.id("catalog")
@@ -99,14 +104,18 @@ struct FeatureHubSettings: View {
                     if FeatureGroup.allCases.allSatisfy({ members(in: $0).isEmpty }) {
                         ContentUnavailableView.search(text: catalogQuery)
                     }
-                    neverUsedCard
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(hub.footerNote)
-                        Text(hub.energyHelp)
+                    // Keep the optional offer in a stable footer child so
+                    // inclusion changes cannot invalidate the lazy range.
+                    VStack(alignment: .leading, spacing: 20) {
+                        neverUsedCard
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(hub.footerNote)
+                            Text(hub.energyHelp)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
                 } else {
                     SettingsCard {
                         PermissionsPortalSections(hub: hub)
