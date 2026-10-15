@@ -131,7 +131,7 @@ private struct NotchAgentLimitsCard: View {
     /// A reading the Claude app saved a while ago: still the latest known,
     /// shown quieter until the app checks again.
     private var stale: Bool {
-        guard let limits = snapshot.limits[provider], limits.source == .claudeApp else { return false }
+        guard provider == .claude, let limits = snapshot.limits[provider] else { return false }
         return now.timeIntervalSince(limits.observedAt) >= AgentClaudeAppUsage.freshness
     }
 
@@ -161,7 +161,7 @@ private struct NotchAgentLimitsCard: View {
                         ForEach(windows) { row($0) }
                     }
                     .opacity(stale ? 0.6 : 1)
-                    if windows.count == 1 { caption }
+                    caption
                 }
             }
         }
