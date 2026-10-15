@@ -100,12 +100,12 @@ enum ScreenshotArrowEditingTests {
         let headBase = CGPoint(x: (head.left.x + head.right.x) / 2, y: (head.left.y + head.right.y) / 2)
         suite.expect(headBase.x < tip.x && headBase.y > tip.y,
                      "the curved arrowhead follows the terminal tangent rather than the endpoint chord")
-        let firstSketch = ScreenshotSupport.arrowStrokePath(from: tail, to: tip, strokeWidth: 4,
-                                                             style: .scribbly, seed: 17, through: middle)
-        suite.expect(firstSketch == ScreenshotSupport.arrowStrokePath(from: tail, to: tip, strokeWidth: 4,
-                                                                       style: .scribbly, seed: 17, through: middle)
-                        && firstSketch != ScreenshotSupport.arrowStrokePath(from: tail, to: tip, strokeWidth: 4,
-                                                                             style: .scribbly, seed: 18, through: middle),
+        let firstSketch = ScreenshotSupport.scribblyArrowPath(from: tail, to: tip, strokeWidth: 4,
+                                                               seed: 17, through: middle)
+        suite.expect(firstSketch == ScreenshotSupport.scribblyArrowPath(from: tail, to: tip, strokeWidth: 4,
+                                                                         seed: 17, through: middle)
+                        && firstSketch != ScreenshotSupport.scribblyArrowPath(from: tail, to: tip, strokeWidth: 4,
+                                                                               seed: 18, through: middle),
                      "curved scribbly arrows keep their seeded variation through redraw and export")
         for tool in [ScreenshotSupport.Tool.rect, .ellipse, .line] {
             let first = ScreenshotSupport.Annotation(tool: tool, sloppy: true)

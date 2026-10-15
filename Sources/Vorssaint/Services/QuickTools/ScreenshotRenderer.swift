@@ -136,22 +136,22 @@ enum ScreenshotRenderer {
                 let shape = CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner,
                                    transform: nil)
                 drawShape(shape,
-                          outline: annotation.sloppy
+                          ink: annotation.sloppy
                             ? ScreenshotSupport.sloppyRectPath(
                                 rect, strokeWidth: annotation.stroke.width * scale,
                                 seed: annotation.scribbleSeed)
-                            : shape,
+                            : nil,
                           annotation: annotation, in: context, scale: scale,
                           shadowsEnabled: annotationShadowsEnabled)
             case .ellipse:
                 let rect = annotation.rect.standardized
                 let shape = CGPath(ellipseIn: rect, transform: nil)
                 drawShape(shape,
-                          outline: annotation.sloppy
+                          ink: annotation.sloppy
                             ? ScreenshotSupport.sloppyEllipsePath(
                                 rect, strokeWidth: annotation.stroke.width * scale,
                                 seed: annotation.scribbleSeed)
-                            : shape,
+                            : nil,
                           annotation: annotation, in: context, scale: scale,
                           shadowsEnabled: annotationShadowsEnabled)
             case .line:
@@ -185,9 +185,9 @@ enum ScreenshotRenderer {
 
     /// Fills and outlines a rectangle or ellipse in one transparency layer,
     /// so a tinted fill and its outline cast a single shadow. A sloppy shape
-    /// strokes its hand-drawn outline around the regular fill.
+    /// fills its hand-drawn `ink` around the regular fill instead of a stroke.
     private static func drawShape(_ path: CGPath,
-                                  outline: CGPath,
+                                  ink: CGPath?,
                                   annotation: ScreenshotSupport.Annotation,
                                   in context: CGContext,
                                   scale: CGFloat,
@@ -207,12 +207,18 @@ enum ScreenshotRenderer {
             context.setFillColor(color(annotation))
             context.fillPath()
         }
-        context.addPath(outline)
-        context.setStrokeColor(color(annotation))
-        context.setLineWidth(annotation.stroke.width * scale)
-        context.setLineJoin(.round)
-        context.setLineCap(.round)
-        context.strokePath()
+        if let ink {
+            context.addPath(ink)
+            context.setFillColor(color(annotation))
+            context.fillPath()
+        } else {
+            context.addPath(path)
+            context.setStrokeColor(color(annotation))
+            context.setLineWidth(annotation.stroke.width * scale)
+            context.setLineJoin(.round)
+            context.setLineCap(.round)
+            context.strokePath()
+        }
         context.endTransparencyLayer()
         context.restoreGState()
     }
@@ -396,19 +402,20 @@ enum ScreenshotRenderer {
         let width = annotation.stroke.width * scale
         context.saveGState()
         applyShadow(context, scale: scale, enabled: shadowsEnabled)
-        context.setStrokeColor(color(annotation))
-        context.setLineWidth(width)
-        context.setLineCap(.round)
-        context.beginPath()
         if annotation.sloppy {
             context.addPath(ScreenshotSupport.sloppyLinePath(from: start, to: end,
                                                              strokeWidth: width,
                                                              seed: annotation.scribbleSeed))
+            context.setFillColor(color(annotation))
+            context.fillPath()
         } else {
+            context.setStrokeColor(color(annotation))
+            context.setLineWidth(width)
+            context.setLineCap(.round)
             context.move(to: start)
             context.addLine(to: end)
+            context.strokePath()
         }
-        context.strokePath()
         context.restoreGState()
     }
 
@@ -429,12 +436,19 @@ enum ScreenshotRenderer {
         context.setLineJoin(.round)
         context.setLineCap(.round)
 
-        if let outline = ScreenshotSupport.arrowStrokePath(from: start,
+        let middle = annotation.points.count > 2 ? annotation.points[2] : nil
+        if annotation.arrowStyle == .scribbly {
+            context.addPath(ScreenshotSupport.scribblyArrowPath(from: start, to: end,
+                                                                strokeWidth: width,
+                                                                seed: annotation.scribbleSeed,
+                                                                through: middle))
+            context.fillPath()
+        } else if let outline = ScreenshotSupport.arrowStrokePath(from: start,
                                                            to: end,
                                                            strokeWidth: width,
                                                            style: annotation.arrowStyle,
                                                            seed: annotation.scribbleSeed,
-                                                           through: annotation.points.count > 2 ? annotation.points[2] : nil) {
+                                                           through: middle) {
             // Shaft and head in one stroke: the shadow falls on the whole arrow
             // once, instead of the head shading the shaft where they meet.
             context.addPath(outline)
@@ -443,7 +457,7 @@ enum ScreenshotRenderer {
             context.addPath(ScreenshotSupport.arrowSilhouette(from: start,
                                                               to: end,
                                                               strokeWidth: width,
-                                                              through: annotation.points.count > 2 ? annotation.points[2] : nil))
+                                                              through: middle))
             context.fillPath()
         }
         context.restoreGState()

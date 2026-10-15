@@ -1813,16 +1813,30 @@ enum ScreenshotFeatureTests {
             seed: 18)
         suite.expect(stableScribble == sameScribble
                 && stableScribble != differentScribble
-                && stableScribble.shaft.count > 2,
+                && stableScribble.shaft.points.count > 2,
                "scribbly arrows vary by seed but keep one stable design when redrawn")
+        suite.expect(stableScribble.shaft.points.first == .zero
+                && stableScribble.shaft.points.last == CGPoint(x: 160, y: 80)
+                && stableScribble.leftWing.points.last == CGPoint(x: 160, y: 80)
+                && stableScribble.rightWing.points.first == CGPoint(x: 160, y: 80),
+               "a scribbly arrow still runs from its tail grip to its tip, where both wings meet")
+        let shaftWidths = stableScribble.shaft.widths
+        suite.expect(shaftWidths.first! < shaftWidths.max()! * 0.7
+                && stableScribble.rightWing.widths.last! < stableScribble.rightWing.widths.first! * 0.6
+                && shaftWidths.max()! - shaftWidths.min()! > 1.5,
+               "scribbly ink lands and lifts lighter and swells along the stroke like a marker")
         suite.expect(ScreenshotSupport.arrowStrokePath(from: .zero, to: CGPoint(x: 100, y: 0),
                                                  strokeWidth: 4, style: .filled, seed: 0) == nil
-                && arrowStyles.filter { $0 != .filled }.allSatisfy {
+                && ScreenshotSupport.arrowStrokePath(from: .zero, to: CGPoint(x: 100, y: 0),
+                                                     strokeWidth: 4, style: .scribbly, seed: 17) == nil
+                && ScreenshotSupport.scribblyArrowPath(from: .zero, to: CGPoint(x: 100, y: 0),
+                                                       strokeWidth: 4, seed: 17).boundingBox.width >= 100
+                && arrowStyles.filter { $0 != .filled && $0 != .scribbly }.allSatisfy {
                     ScreenshotSupport.arrowStrokePath(from: .zero, to: CGPoint(x: 100, y: 0),
                                                       strokeWidth: 4, style: $0, seed: 17)?
                         .boundingBox.width ?? 0 >= 100
                 },
-               "the solid arrow is a filled silhouette and every other style is one stroked path")
+               "solid and scribbly arrows are filled ink and every other style is one stroked path")
         // With shadows on, a shaft pixel under the head's shadow must match a
         // shaft pixel far from the head: the head and the shaft are one
         // stroke, so the head never shades the shaft where they meet.
@@ -2949,6 +2963,42 @@ enum ScreenshotFeatureTests {
                 && sloppyBox.insetBy(dx: -16, dy: -16).contains(sloppyLoop.boundingBoxOfPath)
                 && sloppyLoop.boundingBoxOfPath.width > sloppyBox.width * 0.9,
                "a sloppy ellipse loops around its box without wandering off")
+        // Hand-drawn marks are filled ink: every dot and joint merges under the
+        // nonzero rule, so the stroke is solid along its whole centerline.
+        let ink = ScreenshotSupport.scribblyArrowGeometry(from: CGPoint(x: 20, y: 30),
+                                                          to: CGPoint(x: 220, y: 140),
+                                                          strokeWidth: 6, seed: 5)
+        let inkPath = ScreenshotSupport.inkPath([ink.shaft, ink.leftWing, ink.rightWing])
+        let centerline = ink.shaft.points + ink.leftWing.points + ink.rightWing.points
+        suite.expect(zip(centerline, centerline.dropFirst()).allSatisfy { from, to in
+                    inkPath.contains(CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2),
+                                     using: .winding, transform: .identity)
+                }
+                && !inkPath.contains(CGPoint(x: 120, y: 20), using: .winding, transform: .identity),
+               "hand-drawn ink is solid along its centerline and empty beside it")
+        // A loop tighter than the pen, crossing itself, still inks solid.
+        let tight = (0...40).map { step -> CGPoint in
+            let angle = CGFloat(step) / 40 * 2.4 * .pi
+            return CGPoint(x: 50 + cos(angle) * 3, y: 50 + sin(angle) * 3)
+        }
+        let tightInk = ScreenshotSupport.inkPath([ScreenshotSupport.InkStroke(
+            points: tight, widths: tight.indices.map { 10 + CGFloat($0 % 3) })])
+        suite.expect((tight + [CGPoint(x: 50, y: 50), CGPoint(x: 57, y: 50), CGPoint(x: 50, y: 43)]).allSatisfy {
+                    tightInk.contains($0, using: .winding, transform: .identity)
+                }
+                && !tightInk.contains(CGPoint(x: 62, y: 50), using: .winding, transform: .identity),
+               "ink folded through a bend tighter than the pen stays solid")
+        let bend = [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 100)]
+        let bendInk = ScreenshotSupport.inkPath([ScreenshotSupport.InkStroke(points: bend, widths: [8, 8, 8])])
+        suite.expect(bendInk.contains(CGPoint(x: 103.8, y: 0), using: .winding, transform: .identity)
+                && bendInk.contains(CGPoint(x: 100.5, y: 3.8), using: .winding, transform: .identity)
+                && bendInk.contains(CGPoint(x: 96.5, y: 3.8), using: .winding, transform: .identity)
+                && !bendInk.contains(CGPoint(x: 50, y: 5), using: .winding, transform: .identity),
+               "a sharp corner in ink keeps its full width round the outside")
+        suite.expect(sloppyRect.contains(CGPoint(x: 10, y: 80), using: .winding, transform: .identity)
+                && sloppyRect.contains(CGPoint(x: 110, y: 140), using: .winding, transform: .identity)
+                && !sloppyRect.contains(CGPoint(x: 110, y: 80), using: .winding, transform: .identity),
+               "a sloppy rectangle inks its sides and leaves its inside open")
         suite.expect(ScreenshotSupport.sloppyEllipsePath(.zero, strokeWidth: 4, seed: 7).isEmpty
                 && ScreenshotSupport.sloppyLinePath(from: .zero, to: .zero, strokeWidth: 4, seed: 1)
                     .isEmpty,

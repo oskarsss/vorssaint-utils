@@ -2528,8 +2528,8 @@ enum ScreenshotSupport {
     }
 
     /// Shaft and heads of a stroked arrow style as one path, so a single
-    /// stroke draws the whole arrow and casts one shadow. The solid style is a
-    /// filled silhouette rather than a stroke and answers nil.
+    /// stroke draws the whole arrow and casts one shadow. The solid and
+    /// scribbly styles are filled rather than stroked and answer nil.
     static func arrowStrokePath(from tail: CGPoint,
                                 to tip: CGPoint,
                                 strokeWidth: CGFloat,
@@ -2537,38 +2537,10 @@ enum ScreenshotSupport {
                                 seed: UInt64,
                                 through middle: CGPoint? = nil) -> CGPath? {
         if let middle {
-            guard style != .filled else { return nil }
+            guard style != .filled, style != .scribbly else { return nil }
             let curve = ArrowCurve(from: tail, to: tip, through: middle)
             let head = curve.head(strokeWidth: strokeWidth)
-            let path = style == .outline || style == .scribbly ? curve.shaft(head: head) : curve.path()
-            if style == .scribbly {
-                // Keep the hand-drawn variation stable as the curve changes.
-                var randomizer = ScribbleRandomizer(seed: seed)
-                let endT = curve.shaftEnd(head: head)
-                let count = curve.samples.count
-                let points = (0..<count).map {
-                    curve.point(at: CGFloat($0) / CGFloat(count - 1) * endT)
-                }
-                let wobbleAmount = min(strokeWidth * 0.35, curve.length * 0.025)
-                let rough = CGMutablePath()
-                rough.move(to: tail)
-                for index in 1..<(points.count - 1) {
-                    let t = CGFloat(index) / CGFloat(points.count - 1)
-                    let wobble = randomizer.signedUnit() * wobbleAmount * sin(.pi * t)
-                    let direction = CGPoint(x: points[index + 1].x - points[index - 1].x,
-                                            y: points[index + 1].y - points[index - 1].y)
-                    let length = max(0.001, hypot(direction.x, direction.y))
-                    rough.addLine(to: CGPoint(x: points[index].x - direction.y / length * wobble,
-                                              y: points[index].y + direction.x / length * wobble))
-                }
-                rough.addLine(to: CGPoint(x: (head.left.x + head.right.x) / 2,
-                                         y: (head.left.y + head.right.y) / 2))
-                rough.addLines(between: roughPath(from: head.left, to: tip, segments: 3,
-                                                  wobble: strokeWidth * 0.22, randomizer: &randomizer))
-                rough.addLines(between: roughPath(from: head.right, to: tip, segments: 3,
-                                                  wobble: strokeWidth * 0.22, randomizer: &randomizer))
-                return rough
-            }
+            let path = style == .outline ? curve.shaft(head: head) : curve.path()
             path.addLines(between: [head.left, tip, head.right])
             if style == .outline { path.closeSubpath() }
             if style == .doubleEnded {
@@ -2580,7 +2552,7 @@ enum ScreenshotSupport {
         let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
         let path = CGMutablePath()
         switch style {
-        case .filled:
+        case .filled, .scribbly:
             return nil
         case .outline:
             path.addLines(between: [tail, CGPoint(x: (head.left.x + head.right.x) / 2,
@@ -2595,64 +2567,74 @@ enum ScreenshotSupport {
             path.addLines(between: [tail, tip])
             path.addLines(between: [head.left, tip, head.right])
             path.addLines(between: [tailHead.left, tail, tailHead.right])
-        case .scribbly:
-            let geometry = scribblyArrowGeometry(from: tail,
-                                                 to: tip,
-                                                 strokeWidth: strokeWidth,
-                                                 seed: seed)
-            path.addLines(between: geometry.shaft)
-            path.addLines(between: geometry.leftWing)
-            path.addLines(between: geometry.rightWing)
         }
         return path
     }
 
-    /// A lightly hand-drawn arrow made from stable, seeded wobble. The seed
-    /// belongs to the annotation so a redraw or export keeps the same sketch,
-    /// while each newly created scribbly arrow gets its own variation.
+    /// A hand-drawn arrow in the same ink as sloppy shapes: a shaft pulled
+    /// into a faint arc, then two wing strokes that each meet the tip. The
+    /// seed belongs to the annotation so a redraw or export keeps the same
+    /// sketch, while each newly created scribbly arrow gets its own variation.
     struct ScribblyArrowGeometry: Equatable {
-        let shaft: [CGPoint]
-        let leftWing: [CGPoint]
-        let rightWing: [CGPoint]
+        let shaft: InkStroke
+        let leftWing: InkStroke
+        let rightWing: InkStroke
     }
 
     static func scribblyArrowGeometry(from tail: CGPoint,
                                       to tip: CGPoint,
                                       strokeWidth: CGFloat,
-                                      seed: UInt64) -> ScribblyArrowGeometry {
-        let dx = tip.x - tail.x
-        let dy = tip.y - tail.y
-        let distance = hypot(dx, dy)
-        let angle = atan2(dy, dx)
-        let direction = CGPoint(x: cos(angle), y: sin(angle))
-        let perpendicular = CGPoint(x: -direction.y, y: direction.x)
-        let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
-        let base = CGPoint(x: (head.left.x + head.right.x) / 2,
-                           y: (head.left.y + head.right.y) / 2)
+                                      seed: UInt64,
+                                      through middle: CGPoint? = nil) -> ScribblyArrowGeometry {
         var randomizer = ScribbleRandomizer(seed: seed)
-        let shaftSegments = max(4, min(24, Int(ceil(distance / max(10, strokeWidth * 3)))))
-        let shaftWobble = min(max(1, strokeWidth * 0.35), distance * 0.025)
-        let shaft = roughPath(from: tail,
-                              to: base,
-                              segments: shaftSegments,
-                              direction: direction,
-                              perpendicular: perpendicular,
-                              wobble: shaftWobble,
-                              randomizer: &randomizer)
-        let wingWobble = min(max(0.8, strokeWidth * 0.22), distance * 0.035)
-        let leftWing = roughPath(from: head.left,
-                                 to: tip,
-                                 segments: 3,
-                                 wobble: wingWobble,
-                                 randomizer: &randomizer)
-        let rightWing = roughPath(from: head.right,
-                                  to: tip,
-                                  segments: 3,
-                                  wobble: wingWobble,
-                                  randomizer: &randomizer)
-        return ScribblyArrowGeometry(shaft: shaft,
-                                     leftWing: leftWing,
-                                     rightWing: rightWing)
+        let pen = InkPen(strokeWidth: strokeWidth, randomizer: &randomizer)
+        var line: [CGPoint]
+        if let middle {
+            // A bent arrow keeps the curve through its grip exactly; only the
+            // ink and the head are hand-drawn.
+            let curve = ArrowCurve(from: tail, to: tip, through: middle)
+            line = resampled(curve.samples, spacing: pen.spacing)
+        } else {
+            let length = hypot(tip.x - tail.x, tip.y - tail.y)
+            // A hand pulls a long stroke into a faint arc, not a ruled line.
+            let bow = randomizer.signedUnit() * min(length * 0.03, pen.width * 3)
+            let ripple = randomizer.signedUnit() * bow * 0.3
+            line = bowed(resampled([tail, tip], spacing: pen.spacing), bow: bow, ripple: ripple)
+        }
+        let length = polylineLength(line)
+        let headLength = min(max(14, pen.width * 4.5),
+                             max(length * 0.72, min(pen.width * 1.2, length)))
+        // The head follows the direction the shaft arrives in.
+        let approach = point(on: line, atDistance: max(0, length - headLength * 0.6))
+        let angle = atan2(tip.y - approach.y, tip.x - approach.x)
+        func wing(_ side: CGFloat) -> [CGPoint] {
+            let spread = CGFloat.pi / 6.5 * (1 + randomizer.signedUnit() * 0.16)
+            let reach = headLength * (0.88 + abs(randomizer.signedUnit()) * 0.24)
+            let end = CGPoint(x: tip.x - reach * cos(angle + side * spread),
+                              y: tip.y - reach * sin(angle + side * spread))
+            return bowed(resampled([end, tip], spacing: pen.spacing),
+                         bow: randomizer.signedUnit() * reach * 0.06, ripple: 0)
+        }
+        let leftWing = wing(-1)
+        let rightWing = Array(wing(1).reversed())
+        // Pressure builds along the shaft and eases into the tip, where the
+        // wings meet; each wing is flicked, firm at the tip and light where
+        // the pen lifts.
+        return ScribblyArrowGeometry(shaft: pen.stroke(along: line, entry: 0.4, exit: 0.45),
+                                     leftWing: pen.stroke(along: leftWing, entry: 0.35, exit: 0.6),
+                                     rightWing: pen.stroke(along: rightWing, entry: 0.6, exit: 0.3))
+    }
+
+    /// The filled ink of a scribbly arrow.
+    static func scribblyArrowPath(from tail: CGPoint,
+                                  to tip: CGPoint,
+                                  strokeWidth: CGFloat,
+                                  seed: UInt64,
+                                  through middle: CGPoint? = nil) -> CGPath {
+        guard hypot(tip.x - tail.x, tip.y - tail.y) > 0.5 else { return CGMutablePath() }
+        let geometry = scribblyArrowGeometry(from: tail, to: tip, strokeWidth: strokeWidth,
+                                             seed: seed, through: middle)
+        return inkPath([geometry.shaft, geometry.leftWing, geometry.rightWing])
     }
 
     private struct ScribbleRandomizer {
@@ -2669,103 +2651,345 @@ enum ScreenshotSupport {
         }
     }
 
-    private static func roughPath(from start: CGPoint,
-                                  to end: CGPoint,
-                                  segments: Int,
-                                  direction: CGPoint? = nil,
-                                  perpendicular: CGPoint? = nil,
-                                  wobble: CGFloat,
-                                  randomizer: inout ScribbleRandomizer) -> [CGPoint] {
-        let lineX = end.x - start.x
-        let lineY = end.y - start.y
-        let length = hypot(lineX, lineY)
-        let pathDirection = direction
-            ?? CGPoint(x: lineX / max(length, 0.001), y: lineY / max(length, 0.001))
-        let pathPerpendicular = perpendicular
-            ?? CGPoint(x: -pathDirection.y, y: pathDirection.x)
-        let count = max(1, segments)
-        return (0...count).map { index in
-            let progress = CGFloat(index) / CGFloat(count)
-            guard index != 0, index != count else {
-                return CGPoint(x: start.x + lineX * progress,
-                               y: start.y + lineY * progress)
+    // MARK: - Hand-drawn ink
+
+    /// One pen stroke: a centerline and the ink width at each of its points.
+    /// Hand-drawn marks are filled from these rather than stroked at one
+    /// width, so the line swells and thins like a marker under the hand.
+    struct InkStroke: Equatable {
+        let points: [CGPoint]
+        let widths: [CGFloat]
+    }
+
+    /// The pen behind every hand-drawn mark. Pressure builds as a stroke
+    /// starts, wanders along it and eases off as the pen lifts, and the
+    /// marker, held at a slant, lays down more ink pulling down than
+    /// sideways. Sharing one pen keeps sloppy shapes and scribbly arrows in
+    /// the same hand.
+    private struct InkPen {
+        let width: CGFloat
+        private let nib: CGFloat
+        private let frequencies: (CGFloat, CGFloat)
+        private let phases: (CGFloat, CGFloat)
+
+        init(strokeWidth: CGFloat, randomizer: inout ScribbleRandomizer) {
+            width = strokeWidth * (0.94 + abs(randomizer.signedUnit()) * 0.18)
+            nib = .pi / 2 + randomizer.signedUnit() * 0.3
+            frequencies = (0.7 + abs(randomizer.signedUnit()) * 0.8,
+                           2 + abs(randomizer.signedUnit()) * 1.5)
+            phases = (randomizer.signedUnit() * .pi, randomizer.signedUnit() * .pi)
+        }
+
+        /// Centerline spacing fine enough for a smooth edge.
+        var spacing: CGFloat { max(1, width * 0.4) }
+
+        /// Ink along `points`; `entry` and `exit` are the share of the full
+        /// width where the pen lands and lifts.
+        func stroke(along points: [CGPoint], entry: CGFloat, exit: CGFloat) -> InkStroke {
+            let points = ScreenshotSupport.resampled(points, spacing: spacing)
+            var distances: [CGFloat] = [0]
+            for (from, to) in zip(points, points.dropFirst()) {
+                distances.append(distances[distances.count - 1] + hypot(to.x - from.x, to.y - from.y))
             }
-            let envelope = CGFloat(sin(Double.pi * Double(progress)))
-            let sideOffset = randomizer.signedUnit() * wobble * envelope
-            let forwardOffset = randomizer.signedUnit() * wobble * 0.28 * envelope
-            return CGPoint(x: start.x + lineX * progress
-                                + pathPerpendicular.x * sideOffset
-                                + pathDirection.x * forwardOffset,
-                           y: start.y + lineY * progress
-                                + pathPerpendicular.y * sideOffset
-                                + pathDirection.y * forwardOffset)
+            let total = distances.last ?? 0
+            let attack = min(total * 0.2, width * 4.5)
+            let release = min(total * 0.3, width * 5)
+            func eased(_ value: CGFloat) -> CGFloat {
+                let clamped = max(0, min(1, value))
+                return 1 - (1 - clamped) * (1 - clamped)
+            }
+            let widths = points.indices.map { index -> CGFloat in
+                let distance = distances[index]
+                let progress = total > 0 ? distance / total : 0
+                let landing = attack > 0 ? eased(distance / attack) : 1
+                let lifting = release > 0 ? eased((total - distance) / release) : 1
+                let taper = (entry + (1 - entry) * landing) * (exit + (1 - exit) * lifting)
+                let pressure = 1 + 0.17 * sin(2 * .pi * progress * frequencies.0 + phases.0)
+                    + 0.08 * sin(2 * .pi * progress * frequencies.1 + phases.1)
+                let before = points[max(0, index - 1)]
+                let after = points[min(points.count - 1, index + 1)]
+                let heading = atan2(after.y - before.y, after.x - before.x)
+                let slant = 1 + 0.28 * cos(2 * (heading - nib))
+                return max(width * 0.3, width * taper * pressure * slant)
+            }
+            return InkStroke(points: points, widths: widths)
+        }
+    }
+
+    /// Filled outline of ink strokes. Each stroke is a band whose edges sit
+    /// half the ink width either side of the centerline, with round dots for
+    /// its ends and for bends sharper than the pen. Every part winds the same
+    /// way, so the nonzero fill merges them, and where a loop crosses its own
+    /// start the ink stays solid.
+    static func inkPath(_ strokes: [InkStroke]) -> CGPath {
+        let path = CGMutablePath()
+        func dot(_ center: CGPoint, _ radius: CGFloat) {
+            path.move(to: CGPoint(x: center.x + radius, y: center.y))
+            path.addArc(center: center, radius: radius, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
+            path.closeSubpath()
+        }
+        for stroke in strokes {
+            var points: [CGPoint] = []
+            var radii: [CGFloat] = []
+            for (point, width) in zip(stroke.points, stroke.widths) {
+                if let last = points.last, hypot(point.x - last.x, point.y - last.y) < 0.01 { continue }
+                points.append(point)
+                radii.append(width / 2)
+            }
+            guard let first = points.first, let last = points.last else { continue }
+            dot(first, radii[0])
+            dot(last, radii[radii.count - 1])
+            guard points.count > 1 else { continue }
+            let directions = zip(points, points.dropFirst()).map { from, to -> CGPoint in
+                let length = hypot(to.x - from.x, to.y - from.y)
+                return CGPoint(x: (to.x - from.x) / length, y: (to.y - from.y) / length)
+            }
+            // Along a smooth run each point's normal splits the turn between
+            // its segments, so neighbouring quads share an edge and the band
+            // has no seams. A sharp corner ends the band and a dot rounds it.
+            let sharp = points.indices.map { index -> Bool in
+                guard index > 0, index < directions.count else { return false }
+                let before = directions[index - 1]
+                let after = directions[index]
+                return before.x * after.x + before.y * after.y < 0.95
+            }
+            func normal(_ index: Int, along segment: Int) -> CGPoint {
+                let before = directions[max(0, index - 1)]
+                let after = directions[min(directions.count - 1, index)]
+                let sum = sharp[index] ? directions[segment]
+                    : CGPoint(x: before.x + after.x, y: before.y + after.y)
+                let length = max(0.001, hypot(sum.x, sum.y))
+                return CGPoint(x: -sum.y / length, y: sum.x / length)
+            }
+            var right: [CGPoint] = []
+            var left: [CGPoint] = []
+            func closeBand() {
+                if right.count > 1 {
+                    path.addLines(between: right + left.reversed())
+                    path.closeSubpath()
+                }
+                right = []
+                left = []
+            }
+            for index in directions.indices {
+                if sharp[index] {
+                    closeBand()
+                    dot(points[index], radii[index])
+                }
+                let direction = directions[index]
+                let startNormal = normal(index, along: index)
+                let endNormal = normal(index + 1, along: index)
+                func edge(_ point: Int, _ normal: CGPoint, _ sign: CGFloat) -> CGPoint {
+                    CGPoint(x: points[point].x + normal.x * radii[point] * sign,
+                            y: points[point].y + normal.y * radii[point] * sign)
+                }
+                let quad = [edge(index, startNormal, -1), edge(index + 1, endNormal, -1),
+                            edge(index + 1, endNormal, 1), edge(index, startNormal, 1)]
+                let rightStep = CGPoint(x: quad[1].x - quad[0].x, y: quad[1].y - quad[0].y)
+                let leftStep = CGPoint(x: quad[2].x - quad[3].x, y: quad[2].y - quad[3].y)
+                if rightStep.x * direction.x + rightStep.y * direction.y > 0,
+                   leftStep.x * direction.x + leftStep.y * direction.y > 0 {
+                    if right.isEmpty {
+                        right = [quad[0]]
+                        left = [quad[3]]
+                    }
+                    right.append(quad[1])
+                    left.append(quad[2])
+                } else {
+                    // A bend tighter than the pen would fold the band inside
+                    // out; a plain quad and dots cover it instead.
+                    closeBand()
+                    let normal = CGPoint(x: -direction.y, y: direction.x)
+                    path.addLines(between: [edge(index, normal, -1), edge(index + 1, normal, -1),
+                                            edge(index + 1, normal, 1), edge(index, normal, 1)])
+                    path.closeSubpath()
+                    dot(points[index], radii[index])
+                    dot(points[index + 1], radii[index + 1])
+                }
+            }
+            closeBand()
+        }
+        return path
+    }
+
+    /// Points every `spacing` along a polyline, keeping both ends exactly.
+    private static func resampled(_ points: [CGPoint], spacing: CGFloat) -> [CGPoint] {
+        guard let first = points.first else { return [] }
+        var result = [first]
+        var previous = first
+        var travelled: CGFloat = 0
+        for point in points.dropFirst() {
+            var from = previous
+            var remaining = hypot(point.x - from.x, point.y - from.y)
+            while travelled + remaining >= spacing, remaining > 0 {
+                let step = spacing - travelled
+                let share = step / remaining
+                from = CGPoint(x: from.x + (point.x - from.x) * share,
+                               y: from.y + (point.y - from.y) * share)
+                result.append(from)
+                remaining -= step
+                travelled = 0
+            }
+            travelled += remaining
+            previous = point
+        }
+        guard let last = points.last, points.count > 1 else { return result }
+        if result.count > 1, travelled < spacing * 0.3 {
+            result[result.count - 1] = last
+        } else {
+            result.append(last)
+        }
+        return result
+    }
+
+    private static func polylineLength(_ points: [CGPoint]) -> CGFloat {
+        zip(points, points.dropFirst()).reduce(0) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
+    }
+
+    private static func point(on points: [CGPoint], atDistance target: CGFloat) -> CGPoint {
+        var travelled: CGFloat = 0
+        for (from, to) in zip(points, points.dropFirst()) {
+            let length = hypot(to.x - from.x, to.y - from.y)
+            if travelled + length >= target, length > 0 {
+                let share = (target - travelled) / length
+                return CGPoint(x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share)
+            }
+            travelled += length
+        }
+        return points.last ?? .zero
+    }
+
+    /// Pushes a centerline sideways by an arc (`bow`) and an S-bend
+    /// (`ripple`) that both vanish at the ends, so endpoints stay put.
+    private static func bowed(_ points: [CGPoint], bow: CGFloat, ripple: CGFloat) -> [CGPoint] {
+        let total = polylineLength(points)
+        guard total > 0, points.count > 2 else { return points }
+        var travelled: CGFloat = 0
+        return points.indices.map { index in
+            if index > 0 {
+                let previous = points[index - 1]
+                travelled += hypot(points[index].x - previous.x, points[index].y - previous.y)
+            }
+            let progress = travelled / total
+            return offset(points, at: index,
+                          by: bow * sin(.pi * progress) + ripple * sin(2 * .pi * progress))
+        }
+    }
+
+    /// A centerline point moved along its normal.
+    private static func offset(_ points: [CGPoint], at index: Int, by amount: CGFloat) -> CGPoint {
+        let before = points[max(0, index - 1)]
+        let after = points[min(points.count - 1, index + 1)]
+        let length = max(0.001, hypot(after.x - before.x, after.y - before.y))
+        return CGPoint(x: points[index].x - (after.y - before.y) / length * amount,
+                       y: points[index].y + (after.x - before.x) / length * amount)
+    }
+
+    /// Samples of a quadratic Bézier between parameters `from` and `to`.
+    private static func quadPoints(_ start: CGPoint, _ control: CGPoint, _ end: CGPoint,
+                                   from: CGFloat = 0, to: CGFloat = 1) -> [CGPoint] {
+        let reach = hypot(control.x - start.x, control.y - start.y)
+            + hypot(end.x - control.x, end.y - control.y)
+        let count = max(2, Int(ceil(reach * abs(to - from) / 2)))
+        return (0...count).map { step in
+            let t = from + (to - from) * CGFloat(step) / CGFloat(count)
+            let u = 1 - t
+            return CGPoint(x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+                           y: u * u * start.y + 2 * u * t * control.y + t * t * end.y)
         }
     }
 
     // MARK: - Sloppy shapes
 
-    /// A rectangle drawn by hand: each side is its own gently bowed stroke
-    /// that starts a little before its corner and runs a little past the
-    /// next, the way a pen overshoots. The seed keeps the sketch stable.
+    /// A rectangle drawn by hand in one stroke: gently bowed sides, corners
+    /// each turned at their own radius, and an end that runs a little past
+    /// the start, the way a pen closes a box on paper.
     static func sloppyRectPath(_ rect: CGRect, strokeWidth: CGFloat, seed: UInt64) -> CGPath {
         let rect = rect.standardized
+        guard rect.width > 0.5, rect.height > 0.5 else { return CGMutablePath() }
         var randomizer = ScribbleRandomizer(seed: seed)
-        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
-        let corners = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
-                       CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
-        let path = CGMutablePath()
-        for index in 0..<4 {
-            let start = corners[index]
-            let end = corners[(index + 1) % 4]
-            addSloppyStroke(to: path, from: start, to: end, strokeWidth: penWidth,
-                            overshoot: true, randomizer: &randomizer)
+        let pen = InkPen(strokeWidth: strokeWidth, randomizer: &randomizer)
+        let shortSide = min(rect.width, rect.height)
+        let jitter = min(max(1, pen.width * 0.5), shortSide * 0.04)
+        // Clockwise on screen from the top left.
+        var corners: [CGPoint] = []
+        for corner in [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                       CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)] {
+            corners.append(CGPoint(x: corner.x + randomizer.signedUnit() * jitter,
+                                   y: corner.y + randomizer.signedUnit() * jitter))
         }
-        return path
+        var entries: [CGPoint] = []
+        var exits: [CGPoint] = []
+        for index in 0..<4 {
+            let corner = corners[index]
+            let previous = corners[(index + 3) % 4]
+            let next = corners[(index + 1) % 4]
+            let radius = min(shortSide * 0.3,
+                             pen.width * 2.4 * (0.6 + abs(randomizer.signedUnit()) * 0.8))
+            func toward(_ point: CGPoint) -> CGPoint {
+                let length = max(0.001, hypot(point.x - corner.x, point.y - corner.y))
+                return CGPoint(x: corner.x + (point.x - corner.x) / length * radius,
+                               y: corner.y + (point.y - corner.y) / length * radius)
+            }
+            entries.append(toward(previous))
+            exits.append(toward(next))
+        }
+        // Side `index` runs from corner `index` to the next, bowed at its middle.
+        var sideControls: [CGPoint] = []
+        for index in 0..<4 {
+            let start = exits[index]
+            let end = entries[(index + 1) % 4]
+            let length = max(0.001, hypot(end.x - start.x, end.y - start.y))
+            let bow = randomizer.signedUnit() * min(jitter * 1.5, length * 0.02)
+            sideControls.append(CGPoint(x: (start.x + end.x) / 2 - (end.y - start.y) / length * bow,
+                                        y: (start.y + end.y) / 2 + (end.x - start.x) / length * bow))
+        }
+        func side(_ index: Int, from: CGFloat = 0, to: CGFloat = 1) -> [CGPoint] {
+            quadPoints(exits[index], sideControls[index], entries[(index + 1) % 4], from: from, to: to)
+        }
+        func corner(_ index: Int) -> [CGPoint] {
+            quadPoints(entries[index], corners[index], exits[index])
+        }
+        let topLength = hypot(entries[1].x - exits[0].x, entries[1].y - exits[0].y)
+        let start = 0.1 + abs(randomizer.signedUnit()) * 0.25
+        let overlap = min(0.15, (pen.width * 2 + topLength * 0.04) / max(1, topLength))
+        var line = side(0, from: start)
+        for index in 1..<4 {
+            line += corner(index) + side(index)
+        }
+        line += corner(0) + side(0, to: start + overlap)
+        // The end settles onto the start, so the box reads as closed.
+        let drift = randomizer.signedUnit() * min(pen.width * 0.35, shortSide * 0.03)
+        return inkPath([pen.stroke(along: drifted(line, by: drift), entry: 0.3, exit: 0.3)])
     }
 
-    /// A line drawn by hand: one slightly bowed stroke between the points.
+    /// Eases the last stretch of a closed loop off its own start.
+    private static func drifted(_ points: [CGPoint], by drift: CGFloat) -> [CGPoint] {
+        let total = polylineLength(points)
+        guard total > 0 else { return points }
+        let stretch: CGFloat = 0.15
+        var travelled: CGFloat = 0
+        return points.indices.map { index in
+            if index > 0 {
+                let previous = points[index - 1]
+                travelled += hypot(points[index].x - previous.x, points[index].y - previous.y)
+            }
+            let share = max(0, (travelled / total - (1 - stretch)) / stretch)
+            return offset(points, at: index, by: drift * share * share)
+        }
+    }
+
+    /// A line drawn by hand: one stroke pulled into a slight arc.
     static func sloppyLinePath(from start: CGPoint, to end: CGPoint,
                                strokeWidth: CGFloat, seed: UInt64) -> CGPath {
+        let length = hypot(end.x - start.x, end.y - start.y)
+        guard length > 0.5 else { return CGMutablePath() }
         var randomizer = ScribbleRandomizer(seed: seed)
-        let path = CGMutablePath()
-        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
-        addSloppyStroke(to: path, from: start, to: end, strokeWidth: penWidth,
-                        overshoot: false, randomizer: &randomizer)
-        return path
-    }
-
-    private static func addSloppyStroke(to path: CGMutablePath,
-                                        from start: CGPoint,
-                                        to end: CGPoint,
-                                        strokeWidth: CGFloat,
-                                        overshoot: Bool,
-                                        randomizer: inout ScribbleRandomizer) {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let length = hypot(dx, dy)
-        guard length > 0.5 else { return }
-        let direction = CGPoint(x: dx / length, y: dy / length)
-        let normal = CGPoint(x: -direction.y, y: direction.x)
-        // Wobble grows with the stroke but stays a small share of short sides.
-        let jitter = min(max(1, strokeWidth * 0.6), length * 0.06)
-        let extend = overshoot ? min(max(2, strokeWidth * 1.4), length * 0.08) : 0
-        func shifted(_ point: CGPoint, along: CGFloat, across: CGFloat) -> CGPoint {
-            CGPoint(x: point.x + direction.x * along + normal.x * across,
-                    y: point.y + direction.y * along + normal.y * across)
-        }
-        let from = shifted(start,
-                           along: -extend * (0.4 + 0.6 * abs(randomizer.signedUnit())),
-                           across: randomizer.signedUnit() * jitter * 0.6)
-        let to = shifted(end,
-                         along: extend * (0.4 + 0.6 * abs(randomizer.signedUnit())),
-                         across: randomizer.signedUnit() * jitter * 0.6)
-        let bow = randomizer.signedUnit() * min(jitter * 1.6, length * 0.035)
-        let first = shifted(start, along: length * (0.3 + randomizer.signedUnit() * 0.06),
-                            across: bow + randomizer.signedUnit() * jitter * 0.35)
-        let second = shifted(start, along: length * (0.7 + randomizer.signedUnit() * 0.06),
-                             across: bow * 0.6 + randomizer.signedUnit() * jitter * 0.35)
-        path.move(to: from)
-        path.addCurve(to: to, control1: first, control2: second)
+        let pen = InkPen(strokeWidth: strokeWidth, randomizer: &randomizer)
+        let bow = randomizer.signedUnit() * min(length * 0.03, pen.width * 3)
+        let line = bowed(resampled([start, end], spacing: pen.spacing),
+                         bow: bow, ripple: randomizer.signedUnit() * bow * 0.3)
+        return inkPath([pen.stroke(along: line, entry: 0.5, exit: 0.4)])
     }
 
     /// An ellipse drawn by hand in one loop: the radius drifts a little as
@@ -2773,35 +2997,33 @@ enum ScreenshotSupport {
     /// closing, like a circle drawn around something on paper.
     static func sloppyEllipsePath(_ rect: CGRect, strokeWidth: CGFloat, seed: UInt64) -> CGPath {
         let rect = rect.standardized
-        var randomizer = ScribbleRandomizer(seed: seed)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
         let radiusX = rect.width / 2
         let radiusY = rect.height / 2
-        let path = CGMutablePath()
-        guard radiusX > 0.5, radiusY > 0.5 else { return path }
-        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
+        guard radiusX > 0.5, radiusY > 0.5 else { return CGMutablePath() }
+        var randomizer = ScribbleRandomizer(seed: seed)
+        let pen = InkPen(strokeWidth: strokeWidth, randomizer: &randomizer)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
         let startAngle = CGFloat.pi * (1.05 + randomizer.signedUnit() * 0.2)
         let sweep = CGFloat.pi * 2 * (1.08 + abs(randomizer.signedUnit()) * 0.07)
         let shortSide = min(radiusX, radiusY)
         // The loop starts slightly inside and ends slightly outside, so the
         // overlap reads as a pen passing its own start.
-        let drift = min(max(1.5, penWidth * 0.9), shortSide * 0.12)
-        let waveAmount = min(max(0.8, penWidth * 0.45), shortSide * 0.06)
+        let drift = min(max(1.5, pen.width * 0.55), shortSide * 0.1)
+        let waveAmount = min(max(0.8, pen.width * 0.45), shortSide * 0.06)
         let wavePhase = randomizer.signedUnit() * .pi
         let tilt = randomizer.signedUnit() * 0.05
-        let steps = 72
-        for step in 0...steps {
+        let steps = max(72, Int(.pi * (radiusX + radiusY) * 1.15 / 3))
+        let line = (0...steps).map { step -> CGPoint in
             let progress = CGFloat(step) / CGFloat(steps)
             let angle = startAngle + sweep * progress
             let wave = sin(angle * 2 + wavePhase) * waveAmount
             let offset = -drift / 2 + drift * progress + wave
             let x = cos(angle) * (radiusX + offset)
             let y = sin(angle) * (radiusY + offset)
-            let point = CGPoint(x: center.x + x * cos(tilt) - y * sin(tilt),
-                                y: center.y + x * sin(tilt) + y * cos(tilt))
-            if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            return CGPoint(x: center.x + x * cos(tilt) - y * sin(tilt),
+                           y: center.y + x * sin(tilt) + y * cos(tilt))
         }
-        return path
+        return inkPath([pen.stroke(along: line, entry: 0.15, exit: 0.25)])
     }
 
     /// Distance from a point to a segment, for hit-testing lines and arrows.
