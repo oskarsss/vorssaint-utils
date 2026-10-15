@@ -46,6 +46,7 @@ struct MetricsTests {
             ("mixer", {
                 MixerNativeDragTests.run(suite)
                 MixerOutputAdjustmentContract.run(suite)
+                MixerHeadphonesDisconnectContract.run(suite)
                 MixerLevelCompensationContract.run(suite)
                 SoundOutputSwitchContract.run(suite)
                 MixerUniversalRoutingContract.run(suite)
@@ -76,6 +77,9 @@ struct MetricsTests {
             }),
             ("repository", { RepositoryFeatureTests.run(suite) }),
             ("screenshots", {
+                ScreenshotCanvasSupportTests.run(suite)
+                ScreenshotImageLayerTests.run(suite)
+                ScreenshotCanvasModelTests.run(suite)
                 ScreenTextCompletionTests.run(suite)
                 ScreenshotOCRControlTests.run(suite)
                 ScreenshotPreviewHoverTests.run(suite)
@@ -84,6 +88,7 @@ struct MetricsTests {
                 ScreenshotCustomColorTests.run(suite)
                 ScreenshotArrowEditingTests.run(suite)
                 ScreenshotCompositingTests.run(suite)
+                ScreenshotSpotlightEditingTests.run(suite)
                 ScreenshotShareCompletionTests.run(suite)
                 ScreenshotAutoShelfTests.run(suite)
                 ScreenshotScrollingCaptureTests.run(suite)

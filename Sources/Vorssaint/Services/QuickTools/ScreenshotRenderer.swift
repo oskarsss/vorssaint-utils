@@ -81,32 +81,27 @@ enum ScreenshotRenderer {
 
     /// Draws every annotation over the base content. `blurSources` holds what
     /// blur areas paint from. Text being edited inline is skipped so the live
-    /// field is the only visible copy.
+    /// field is the only visible copy. The spotlight dim lands where the
+    /// topmost region that lights part of the image sits in the layer order,
+    /// so marks above it stay bright.
     static func drawAnnotations(_ annotations: [ScreenshotSupport.Annotation],
                                 in context: CGContext,
                                 blurSources: BlurSources,
                                 imageSize: CGSize,
                                 scale: CGFloat,
                                 annotationShadowsEnabled: Bool,
-                                skippingText editingID: UUID? = nil) {
+                                skippingText editingID: UUID? = nil,
+                                spotlightDimStrength: CGFloat = 0.5) {
         blurSources.eraseCache?.beginPass(image: blurSources.image, textRuns: blurSources.textRuns)
-        // Every spotlight lights its area in one shared dim layer, so two
-        // never darken each other. The layer dims the capture, not the marks:
-        // it goes under the first mark, and a blur area drawn later, which
-        // replaces the pixels under it, is dimmed again inside itself.
-        let spotlights = annotations.filter { $0.tool == .spotlight }.map(\.rect.standardized)
+        blurSources.imageLayerCache?.beginPass(base: blurSources.image)
+        var precedingImages: [ScreenshotSupport.Annotation] = []
+        let bounds = CGRect(origin: .zero, size: imageSize)
+        let topSpotlight = annotations.lastIndex { litRegion($0, within: bounds) != nil }
         // Lenses must also respect censors added after them: enlarging a
         // secret can put its pixels outside the censor's original rectangle.
         let censors = annotations.filter { $0.tool == .pixelate || $0.tool == .redact }
-        var dimDrawn = spotlights.isEmpty
-        for annotation in annotations {
-            if !dimDrawn, annotation.tool != .pixelate, annotation.tool != .spotlight {
-                dimDrawn = true
-                drawSpotlights(spotlights, in: context, imageSize: imageSize, scale: scale)
-            }
+        for (index, annotation) in annotations.enumerated() {
             switch annotation.tool {
-            case .spotlight:
-                continue
             case .magnifier:
                 drawMagnifier(annotation, in: context, source: blurSources.image,
                               censors: censors, blurSources: blurSources,
@@ -116,10 +111,22 @@ enum ScreenshotRenderer {
                 drawRuler(annotation, in: context, scale: scale,
                           shadowsEnabled: annotationShadowsEnabled)
             case .pixelate:
-                let replaced = drawBlurArea(annotation, in: context, sources: blurSources, imageSize: imageSize)
-                if dimDrawn, !spotlights.isEmpty, !replaced.isEmpty {
-                    drawSpotlights(spotlights, in: context, imageSize: imageSize, scale: scale,
-                                   within: replaced)
+                // Every style paints what lies below the area, pasted images
+                // included, and only images its paint reads change what that is.
+                let images = ImageLayerCache.images(below: annotation, among: precedingImages,
+                                                    textRuns: blurSources.textRuns, imageSize: imageSize)
+                if ImageLayerCache.usesCapture(annotation, below: images) {
+                    drawBlurArea(annotation, in: context, sources: blurSources, imageSize: imageSize)
+                } else if let sources = blurSources.imageLayerCache?.sources(
+                    for: annotation, images: images, original: blurSources) {
+                    drawBlurArea(annotation, in: context, sources: sources, imageSize: imageSize)
+                } else {
+                    // Without a sample of what is below, the area stays covered.
+                    context.saveGState()
+                    context.setBlendMode(.copy)
+                    context.setFillColor(CGColor(gray: 0, alpha: 1))
+                    context.fill(annotation.rect.intersection(CGRect(origin: .zero, size: imageSize)))
+                    context.restoreGState()
                 }
             case .redact:
                 context.setFillColor(color(annotation))
@@ -174,13 +181,55 @@ enum ScreenshotRenderer {
             case .counter:
                 drawCounter(annotation, in: context, imageSize: imageSize, scale: scale,
                             shadowsEnabled: annotationShadowsEnabled)
-            case .select, .crop:
+            case .image:
+                ScreenshotImageLayerRendering.draw(annotation, in: context)
+                precedingImages.append(annotation)
+            case .spotlight:
+                if index == topSpotlight {
+                    drawSpotlight(annotations, dimStrength: spotlightDimStrength,
+                                  imageSize: imageSize, in: context)
+                }
+            case .select, .crop, .expandCanvas:
                 break
             }
         }
-        if !dimDrawn {
-            drawSpotlights(spotlights, in: context, imageSize: imageSize, scale: scale)
+    }
+
+    /// The part of a spotlight region on the image, or nil when it lights
+    /// nothing there: still a bare press, or cropped away.
+    private static func litRegion(_ annotation: ScreenshotSupport.Annotation,
+                                  within bounds: CGRect) -> CGRect? {
+        guard annotation.tool == .spotlight else { return nil }
+        let region = annotation.rect.standardized.intersection(bounds)
+        return region.isEmpty ? nil : region
+    }
+
+    /// Darkens the image outside the union of the spotlight regions. Only
+    /// the parts of regions on the image count, so one cropped away or still
+    /// a bare press dims nothing. Source atop keeps the capture's alpha:
+    /// transparent window corners stay transparent.
+    private static func drawSpotlight(_ annotations: [ScreenshotSupport.Annotation],
+                                      dimStrength: CGFloat,
+                                      imageSize: CGSize,
+                                      in context: CGContext) {
+        let strength = ScreenshotSupport.sanitizedSpotlightDim(dimStrength)
+        let bounds = CGRect(origin: .zero, size: imageSize)
+        let regions = annotations.compactMap { litRegion($0, within: bounds) }
+        guard let first = regions.first, strength > 0 else { return }
+        let lit = regions.dropFirst().reduce(CGPath(rect: first, transform: nil)) {
+            $0.union(CGPath(rect: $1, transform: nil))
         }
+        // Even-odd over the bounds plus the lit union fills only the outside,
+        // and overlapping regions are never dimmed twice.
+        let dimmed = CGMutablePath()
+        dimmed.addRect(bounds)
+        dimmed.addPath(lit)
+        context.saveGState()
+        context.setBlendMode(.sourceAtop)
+        context.setFillColor(CGColor(gray: 0, alpha: strength))
+        context.addPath(dimmed)
+        context.fillPath(using: .evenOdd)
+        context.restoreGState()
     }
 
     /// Fills and outlines a rectangle or ellipse in one transparency layer,
@@ -220,32 +269,6 @@ enum ScreenshotRenderer {
             context.strokePath()
         }
         context.endTransparencyLayer()
-        context.restoreGState()
-    }
-
-    /// Dims the capture outside every spotlight. The lit areas share the
-    /// rounded corners of rectangles.
-    private static func drawSpotlights(_ rects: [CGRect],
-                                       in context: CGContext,
-                                       imageSize: CGSize,
-                                       scale: CGFloat,
-                                       within areas: [CGRect]? = nil) {
-        let lit = rects.filter { $0.width > 0 && $0.height > 0 }
-        guard !lit.isEmpty else { return }
-        let holes = CGMutablePath()
-        for rect in lit {
-            let corner = ScreenshotSupport.shapeCornerRadius(for: rect, scale: scale)
-            holes.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner,
-                                 transform: nil))
-        }
-        // Overlapping spotlights merge, then the merged lit area is cut out.
-        let shade = CGPath(rect: CGRect(origin: .zero, size: imageSize), transform: nil)
-            .subtracting(holes.normalized())
-        context.saveGState()
-        if let areas { context.clip(to: areas) }
-        context.addPath(shade)
-        context.setFillColor(CGColor(gray: 0, alpha: 0.55))
-        context.fillPath()
         context.restoreGState()
     }
 
@@ -553,7 +576,7 @@ enum ScreenshotRenderer {
                                     imageSize: CGSize,
                                     scale: CGFloat,
                                     shadowsEnabled: Bool) {
-        let diameter = ScreenshotSupport.counterDiameter(for: imageSize, scale: 1)
+        let diameter = ScreenshotSupport.counterDiameter(for: annotation.renderReferenceSize ?? imageSize, scale: 1)
         let center = ScreenshotSupport.counterCenter(annotation)
         let rect = CGRect(x: center.x - diameter / 2,
                           y: center.y - diameter / 2,
@@ -621,71 +644,69 @@ enum ScreenshotRenderer {
     /// blur per level in use, the capture and its finished fills for erasing,
     /// and the text runs recognition found. `textRuns` stays nil until
     /// recognition has read the capture, and text only areas cover all of
-    /// themselves until then.
+    /// themselves until then. `imageOrigin` is where `image` starts on the
+    /// canvas: an erase sample over pasted images holds only what its area reads.
     struct BlurSources {
         var mosaics: [Int: CGImage] = [:]
         var softBlurs: [Int: CGImage] = [:]
         var image: CGImage?
+        var imageOrigin = CGPoint.zero
         var eraseCache: EraseCache?
         var textRuns: [CGRect]?
+        var imageLayerCache: ImageLayerCache?
 
         static let none = BlurSources()
     }
 
-    @discardableResult
     private static func drawBlurArea(_ annotation: ScreenshotSupport.Annotation,
                                      in context: CGContext,
                                      sources: BlurSources,
-                                     imageSize: CGSize) -> [CGRect] {
+                                     imageSize: CGSize) {
         let rect = annotation.rect.standardized
-        guard rect.width > 0, rect.height > 0 else { return [] }
+        guard rect.width > 0, rect.height > 0 else { return }
         // A whole area is a single run. A text only area covers each run of
         // recognized text inside it.
         let runs = annotation.blurTextOnly
             ? ScreenshotSupport.blurTextRuns(in: rect, from: sources.textRuns)
             : [rect]
-        let bounds = CGRect(origin: .zero, size: imageSize)
-        let regions = runs.map { $0.intersection(rect).intersection(bounds) }.filter { !$0.isEmpty }
-        guard !regions.isEmpty else { return [] }
+        guard !runs.isEmpty else { return }
         switch annotation.blurStyle {
         case .pixelate:
             // Nearest-neighbor keeps the mosaic's blocks sharp.
-            guard let mosaic = sources.mosaics[annotation.blurLevel] else { return [] }
+            guard let mosaic = sources.mosaics[annotation.blurLevel] else { return }
             drawSample(mosaic, in: context, imageSize: imageSize,
-                       clippedTo: regions, interpolation: .none)
-            return regions
+                       clippedTo: runs.map { $0.intersection(rect) }, interpolation: .none)
         case .blur:
-            guard let blurred = sources.softBlurs[annotation.blurLevel] else { return [] }
+            guard let blurred = sources.softBlurs[annotation.blurLevel] else { return }
             drawSample(blurred, in: context, imageSize: imageSize,
-                       clippedTo: regions, interpolation: .high)
-            return regions
+                       clippedTo: runs.map { $0.intersection(rect) }, interpolation: .high)
         case .erase:
-            guard let image = sources.image else { return [] }
+            guard let image = sources.image else { return }
+            // Fills are made in the image's own pixels and drawn back on the canvas.
+            let origin = sources.imageOrigin
+            let local = { (canvas: CGRect) in canvas.offsetBy(dx: -origin.x, dy: -origin.y) }
             // The fill is read around the whole run, so an area that cuts
             // through a word never samples the word itself. Text runs are
             // skipped while reading, and a run's own never lies in what is
             // read around it, so one list serves every run.
-            let text = annotation.blurTextOnly ? (sources.textRuns ?? []) : []
-            var replaced: [CGRect] = []
+            let text = (annotation.blurTextOnly ? (sources.textRuns ?? []) : []).map(local)
+            let bounds = CGRect(origin: .zero, size: imageSize)
             for run in runs {
-                guard let patch = sources.eraseCache?.patch(for: run, in: image, skipping: text)
-                        ?? erasePatch(for: run, in: image, skipping: text) else { continue }
-                let region = run.intersection(rect).intersection(bounds)
-                guard !region.isEmpty else { continue }
+                guard let patch = sources.eraseCache?.patch(for: local(run), in: image, skipping: text)
+                        ?? erasePatch(for: local(run), in: image, skipping: text) else { continue }
+                let target = patch.rect.offsetBy(dx: origin.x, dy: origin.y)
                 context.saveGState()
-                context.clip(to: region)
+                context.clip(to: run.intersection(rect).intersection(bounds))
                 // Replace what is under the run. Blending would let text in a
                 // translucent capture show through a fill with alpha.
                 context.setBlendMode(.copy)
                 // CGContext.draw expects an unflipped space, so flip around the patch.
-                context.translateBy(x: 0, y: patch.rect.minY + patch.rect.maxY)
+                context.translateBy(x: 0, y: target.minY + target.maxY)
                 context.scaleBy(x: 1, y: -1)
                 context.interpolationQuality = .high
-                context.draw(patch.image, in: patch.rect)
+                context.draw(patch.image, in: target)
                 context.restoreGState()
-                replaced.append(region)
             }
-            return replaced
         }
     }
 
@@ -798,9 +819,10 @@ enum ScreenshotRenderer {
 
     /// A low-resolution mosaic with per-block color variation.
     static func pixelatedImage(from image: CGImage,
-                               level: Int = ScreenshotSupport.BlurStrength.defaultLevel) -> CGImage? {
+                               level: Int = ScreenshotSupport.BlurStrength.defaultLevel,
+                               referenceSize: CGSize? = nil) -> CGImage? {
         let block = ScreenshotSupport.pixelBlockSize(
-            for: CGSize(width: image.width, height: image.height), level: level)
+            for: referenceSize ?? CGSize(width: image.width, height: image.height), level: level)
         let smallWidth = max(1, image.width / block)
         let smallHeight = max(1, image.height / block)
         guard let small = CGContext(data: nil,
@@ -823,9 +845,10 @@ enum ScreenshotRenderer {
     /// level keeps, and neighboring samples end up close enough that the
     /// stretch back to full size stays smooth.
     static func softBlurredImage(from image: CGImage,
-                                 level: Int = ScreenshotSupport.BlurStrength.defaultLevel) -> CGImage? {
+                                 level: Int = ScreenshotSupport.BlurStrength.defaultLevel,
+                                 referenceSize: CGSize? = nil) -> CGImage? {
         let block = ScreenshotSupport.pixelBlockSize(
-            for: CGSize(width: image.width, height: image.height), level: level)
+            for: referenceSize ?? CGSize(width: image.width, height: image.height), level: level)
         let step = max(1, block / 4)
         let smallWidth = max(1, image.width / step)
         let smallHeight = max(1, image.height / step)
@@ -1214,7 +1237,8 @@ enum ScreenshotRenderer {
                              watermarkImage: CGImage?,
                              style: ScreenshotSupport.BackdropStyle,
                              fill: BackdropFill,
-                             downscaleTo1x: Bool) -> Export? {
+                             downscaleTo1x: Bool,
+                             spotlightDimStrength: CGFloat = 0.5) -> Export? {
         let imageSize = CGSize(width: baseImage.width, height: baseImage.height)
         let corner = ScreenshotSupport.cardCornerRadius(for: imageSize,
                                                         factor: style.cornerRadius)
@@ -1225,7 +1249,8 @@ enum ScreenshotRenderer {
                                               annotationShadowsEnabled: annotationShadowsEnabled,
                                               watermark: watermark,
                                               watermarkImage: watermarkImage,
-                                              cornerRadius: corner)
+                                              cornerRadius: corner,
+                                              spotlightDimStrength: spotlightDimStrength)
         else { return nil }
 
         var result = flattened
@@ -1277,7 +1302,8 @@ enum ScreenshotRenderer {
                                         annotationShadowsEnabled: Bool,
                                         watermark: ScreenshotSupport.WatermarkStyle,
                                         watermarkImage: CGImage?,
-                                        cornerRadius: CGFloat) -> CGImage? {
+                                        cornerRadius: CGFloat,
+                                        spotlightDimStrength: CGFloat) -> CGImage? {
         let width = baseImage.width
         let height = baseImage.height
         guard let context = CGContext(data: nil,
@@ -1297,7 +1323,8 @@ enum ScreenshotRenderer {
                         blurSources: blurSources,
                         imageSize: CGSize(width: width, height: height),
                         scale: scale,
-                        annotationShadowsEnabled: annotationShadowsEnabled)
+                        annotationShadowsEnabled: annotationShadowsEnabled,
+                        spotlightDimStrength: spotlightDimStrength)
         drawWatermark(watermark,
                       image: watermarkImage,
                       in: context,
