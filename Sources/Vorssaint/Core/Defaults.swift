@@ -684,6 +684,9 @@ enum DefaultsKey {
     static let screenshotLastBlurTextOnly = "screenshotLastBlurTextOnly"
     static let screenshotLastArrowStyle = "screenshotLastArrowStyle"
     static let screenshotLastSticker = "screenshotLastSticker"
+    static let screenshotLastShapeFill = "screenshotLastShapeFill"
+    static let screenshotLastTextStyle = "screenshotLastTextStyle"
+    static let screenshotLastSloppy = "screenshotLastSloppy"
     static let screenshotAnnotationShadows = "screenshotAnnotationShadows"
     static let screenshotToolOrder = "screenshotToolOrder"
     static let screenshotToolShortcuts = "screenshotToolShortcuts"
@@ -1865,6 +1868,9 @@ enum Defaults {
         DefaultsKey.screenshotLastBlurTextOnly: false,
         DefaultsKey.screenshotLastArrowStyle: "filled",
         DefaultsKey.screenshotLastSticker: "check",
+        DefaultsKey.screenshotLastShapeFill: "outline",
+        DefaultsKey.screenshotLastTextStyle: "plain",
+        DefaultsKey.screenshotLastSloppy: false,
         DefaultsKey.screenshotAnnotationShadows: false,
         DefaultsKey.screenshotToolOrder: ScreenshotSupport.Tool.defaultOrderStorage,
         DefaultsKey.screenshotToolShortcutsEnabled: true,

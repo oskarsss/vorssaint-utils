@@ -1400,7 +1400,7 @@ enum ScreenshotSupport {
         // Case order is the default rail order and therefore the default
         // mapping for keys 1 through 9. Put the common actions first.
         case select, arrow, pixelate, crop, text, sticker, rect, highlight,
-             freehand, line, ellipse, counter, redact
+             freehand, line, ellipse, counter, redact, spotlight, magnifier, ruler
 
         static let shortcutLimit = 9
 
@@ -1411,10 +1411,21 @@ enum ScreenshotSupport {
         /// Tools that create an annotation by dragging a rectangle.
         var dragsRect: Bool {
             switch self {
-            case .rect, .ellipse, .highlight, .pixelate, .redact: return true
-            case .select, .arrow, .line, .freehand, .text, .sticker, .counter, .crop:
+            case .rect, .ellipse, .highlight, .pixelate, .redact, .spotlight, .magnifier:
+                return true
+            case .select, .arrow, .line, .freehand, .text, .sticker, .counter, .crop, .ruler:
                 return false
             }
+        }
+
+        /// Tools that can be drawn by hand.
+        var drawsSloppy: Bool {
+            self == .rect || self == .ellipse || self == .line
+        }
+
+        /// Tools drawn between two points, which Shift snaps to 45° steps.
+        var dragsSegment: Bool {
+            self == .arrow || self == .line || self == .ruler
         }
 
         /// Existing rectangular marks with visible resize grips.
@@ -1725,6 +1736,31 @@ enum ScreenshotSupport {
         }
     }
 
+    /// How a rectangle or ellipse treats its inside: an outline, a tinted
+    /// fill under the outline, or a solid shape.
+    enum ShapeFillID: String, CaseIterable {
+        case outline, translucent, solid
+
+        static func sanitized(_ raw: String?) -> ShapeFillID {
+            ShapeFillID(rawValue: raw ?? "") ?? .outline
+        }
+    }
+
+    /// How a text mark stands out from what is under it: plain glyphs, glyphs
+    /// with a contrasting outline, or white text on a colored label.
+    enum TextStyleID: String, CaseIterable {
+        case plain, outline, label
+
+        static func sanitized(_ raw: String?) -> TextStyleID {
+            TextStyleID(rawValue: raw ?? "") ?? .plain
+        }
+    }
+
+    /// Whether marks in this color need dark rather than white contrast.
+    static func prefersDarkContrast(_ color: ColorID) -> Bool {
+        color == .white || color == .yellow
+    }
+
     static func randomScribbleSeed() -> UInt64 {
         UInt64.random(in: UInt64.min...UInt64.max)
     }
@@ -1791,6 +1827,11 @@ enum ScreenshotSupport {
         var arrowStyle: ArrowStyleID
         var scribbleSeed: UInt64
         var number: Int
+        var fill: ShapeFillID
+        var textStyle: TextStyleID
+        /// Rectangles, ellipses and lines drawn as if by hand, from
+        /// `scribbleSeed`.
+        var sloppy: Bool
 
         init(id: UUID = UUID(),
              tool: Tool,
@@ -1805,7 +1846,10 @@ enum ScreenshotSupport {
              blurTextOnly: Bool = false,
              arrowStyle: ArrowStyleID = .filled,
              scribbleSeed: UInt64? = nil,
-             number: Int = 0) {
+             number: Int = 0,
+             fill: ShapeFillID = .outline,
+             textStyle: TextStyleID = .plain,
+             sloppy: Bool = false) {
             self.id = id
             self.tool = tool
             self.rect = rect
@@ -1819,10 +1863,13 @@ enum ScreenshotSupport {
             self.blurTextOnly = blurTextOnly
             self.arrowStyle = arrowStyle
             self.scribbleSeed = scribbleSeed
-                ?? (arrowStyle == .scribbly
+                ?? (arrowStyle == .scribbly || sloppy
                     ? ScreenshotSupport.randomScribbleSeed()
                     : 0)
             self.number = number
+            self.fill = fill
+            self.textStyle = textStyle
+            self.sloppy = sloppy
         }
     }
 
@@ -1835,6 +1882,9 @@ enum ScreenshotSupport {
         var blurLevel: Int? = nil
         var blurStyle: BlurStyleID? = nil
         var blurTextOnly: Bool? = nil
+        var fill: ShapeFillID? = nil
+        var textStyle: TextStyleID? = nil
+        var sloppy: Bool? = nil
     }
 
     static func selectionStyle(for annotation: Annotation) -> SelectionStyle {
@@ -1843,7 +1893,18 @@ enum ScreenshotSupport {
             return SelectionStyle(color: annotation.color,
                                   stroke: annotation.stroke,
                                   arrowStyle: annotation.arrowStyle)
-        case .line, .rect, .ellipse, .freehand:
+        case .rect, .ellipse:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: annotation.stroke,
+                                  arrowStyle: nil,
+                                  fill: annotation.fill,
+                                  sloppy: annotation.sloppy)
+        case .line:
+            return SelectionStyle(color: annotation.color,
+                                  stroke: annotation.stroke,
+                                  arrowStyle: nil,
+                                  sloppy: annotation.sloppy)
+        case .freehand, .ruler:
             return SelectionStyle(color: annotation.color,
                                   stroke: annotation.stroke,
                                   arrowStyle: nil)
@@ -1851,7 +1912,8 @@ enum ScreenshotSupport {
             return SelectionStyle(color: annotation.color,
                                   stroke: nil,
                                   arrowStyle: nil,
-                                  textSize: annotation.textSize)
+                                  textSize: annotation.textSize,
+                                  textStyle: annotation.textStyle)
         case .highlight, .counter, .redact:
             return SelectionStyle(color: annotation.color,
                                   stroke: nil,
@@ -1863,7 +1925,7 @@ enum ScreenshotSupport {
                                   blurLevel: annotation.blurLevel,
                                   blurStyle: annotation.blurStyle,
                                   blurTextOnly: annotation.blurTextOnly)
-        case .sticker, .select, .crop:
+        case .sticker, .select, .crop, .spotlight, .magnifier:
             return SelectionStyle(color: nil,
                                   stroke: nil,
                                   arrowStyle: nil)
@@ -1916,6 +1978,76 @@ enum ScreenshotSupport {
     /// so badges stay readable without swallowing small screenshots.
     static func counterDiameter(for imageSize: CGSize, scale: CGFloat) -> CGFloat {
         max(22, min(imageSize.width, imageSize.height) / 24) * scale
+    }
+
+    /// Where a counter's badge sits. A dragged counter keeps its badge at the
+    /// first point and points its tail at the second; a clicked one has no
+    /// points and sits at the middle of its rect.
+    static func counterCenter(_ annotation: Annotation) -> CGPoint {
+        annotation.points.first ?? CGPoint(x: annotation.rect.midX, y: annotation.rect.midY)
+    }
+
+    /// The tip a counter's tail points at, or nil while the tip is still
+    /// inside the badge and a tail would only show as a bump.
+    static func counterTailTip(_ annotation: Annotation, diameter: CGFloat) -> CGPoint? {
+        guard annotation.points.count >= 2 else { return nil }
+        let center = annotation.points[0]
+        let tip = annotation.points[1]
+        return hypot(tip.x - center.x, tip.y - center.y) > diameter * 0.6 ? tip : nil
+    }
+
+    /// A counter badge and, when it has one, its tapering tail as one shape,
+    /// so the fill, outline and shadow treat them as a single mark.
+    static func counterOutline(center: CGPoint, diameter: CGFloat, tip: CGPoint?) -> CGPath {
+        let radius = diameter / 2
+        let circle = CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius,
+                                              width: diameter, height: diameter),
+                            transform: nil)
+        guard let tip else { return circle }
+        let angle = atan2(tip.y - center.y, tip.x - center.x)
+        let spread: CGFloat = 0.62
+        let tail = CGMutablePath()
+        tail.move(to: CGPoint(x: center.x + cos(angle + spread) * radius,
+                              y: center.y + sin(angle + spread) * radius))
+        tail.addLine(to: tip)
+        tail.addLine(to: CGPoint(x: center.x + cos(angle - spread) * radius,
+                                 y: center.y + sin(angle - spread) * radius))
+        tail.closeSubpath()
+        return circle.union(tail)
+    }
+
+    /// The end of a two-point drag. Shift snaps the direction to the nearest
+    /// 45°, keeping the length, so lines run straight or exactly diagonal.
+    static func constrainedSegmentEnd(from start: CGPoint, to end: CGPoint) -> CGPoint {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length > 0 else { return end }
+        let step = CGFloat.pi / 4
+        let angle = (atan2(dy, dx) / step).rounded() * step
+        return CGPoint(x: start.x + cos(angle) * length, y: start.y + sin(angle) * length)
+    }
+
+    /// The circle a magnifier draws in its rect: the largest one that fits,
+    /// centered, so resizing never stretches the lens into an oval.
+    static func magnifierCircle(in rect: CGRect) -> CGRect {
+        let side = min(rect.width, rect.height)
+        return CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+    }
+
+    /// How much a magnifier enlarges what is under its center.
+    static let magnifierZoom: CGFloat = 2
+
+    /// The length a ruler reports, in capture pixels, the unit the editor's
+    /// size label uses.
+    static func rulerLength(from start: CGPoint, to end: CGPoint) -> Int {
+        Int(hypot(end.x - start.x, end.y - start.y).rounded())
+    }
+
+    /// Corner rounding of rectangles and spotlights, softened like the rest of
+    /// the editor's chrome but never more than a quarter of a short side.
+    static func shapeCornerRadius(for rect: CGRect, scale: CGFloat) -> CGFloat {
+        min(6 * scale, min(abs(rect.width), abs(rect.height)) / 4)
     }
 
     // MARK: - Selection handles
@@ -2164,6 +2296,112 @@ enum ScreenshotSupport {
 
     // MARK: - Shape geometry
 
+    /// Endpoint grips plus an arrow's bend grip. The third stored point is
+    /// on the curve at t = 0.5, so the curve follows the grip under the mouse.
+    static func annotationPointHandles(_ annotation: Annotation) -> [CGPoint] {
+        guard annotation.points.count >= 2, annotation.tool != .freehand else { return [] }
+        let ends = Array(annotation.points.prefix(2))
+        guard annotation.tool == .arrow else { return ends }
+        return ends + [annotation.points.count > 2 ? annotation.points[2]
+            : CGPoint(x: (ends[0].x + ends[1].x) / 2, y: (ends[0].y + ends[1].y) / 2)]
+    }
+
+    struct ArrowCurve {
+        let tail: CGPoint
+        let tip: CGPoint
+        let control: CGPoint
+
+        init(from tail: CGPoint, to tip: CGPoint, through middle: CGPoint) {
+            self.tail = tail
+            self.tip = tip
+            control = CGPoint(x: 2 * middle.x - (tail.x + tip.x) / 2,
+                              y: 2 * middle.y - (tail.y + tip.y) / 2)
+        }
+
+        func point(at t: CGFloat) -> CGPoint {
+            let u = 1 - t
+            return CGPoint(x: u * u * tail.x + 2 * u * t * control.x + t * t * tip.x,
+                           y: u * u * tail.y + 2 * u * t * control.y + t * t * tip.y)
+        }
+
+        /// Enough chords to keep normal screenshot curves within a quarter
+        /// pixel of the Bézier, without unbounded work for off-canvas grips.
+        var samples: [CGPoint] {
+            let bend = hypot(tail.x - 2 * control.x + tip.x, tail.y - 2 * control.y + tip.y)
+            let count = max(16, Int(min(512, ceil(sqrt(bend)))))
+            return (0...count).map { point(at: CGFloat($0) / CGFloat(count)) }
+        }
+
+        var length: CGFloat {
+            let points = samples
+            return zip(points, points.dropFirst()).reduce(0) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
+        }
+
+        func head(atStart: Bool = false, strokeWidth: CGFloat) -> (left: CGPoint, right: CGPoint) {
+            let end = atStart ? tail : tip
+            var direction = CGPoint(x: end.x - control.x, y: end.y - control.y)
+            if hypot(direction.x, direction.y) < 0.001 {
+                let other = atStart ? tip : tail
+                direction = CGPoint(x: end.x - other.x, y: end.y - other.y)
+            }
+            let factor = length / max(0.001, hypot(direction.x, direction.y))
+            return arrowHead(from: CGPoint(x: end.x - direction.x * factor,
+                                           y: end.y - direction.y * factor),
+                             to: end, strokeWidth: strokeWidth)
+        }
+
+        func path(endingAt t: CGFloat = 1) -> CGMutablePath {
+            let path = CGMutablePath()
+            path.move(to: tail)
+            // De Casteljau subdivision keeps the shortened shaft on the
+            // original curve, including its draggable midpoint.
+            path.addQuadCurve(to: point(at: t),
+                              control: CGPoint(x: tail.x + (control.x - tail.x) * t,
+                                               y: tail.y + (control.y - tail.y) * t))
+            return path
+        }
+
+        func shaftEnd(head: (left: CGPoint, right: CGPoint)) -> CGFloat {
+            let base = CGPoint(x: (head.left.x + head.right.x) / 2,
+                               y: (head.left.y + head.right.y) / 2)
+            let inset = hypot(tip.x - base.x, tip.y - base.y)
+            let points = samples
+            var remaining = inset
+            var t: CGFloat = 0
+            for index in stride(from: points.count - 1, through: 1, by: -1) {
+                let distance = hypot(points[index].x - points[index - 1].x,
+                                     points[index].y - points[index - 1].y)
+                if distance > 0, remaining <= distance {
+                    t = (CGFloat(index) - remaining / distance) / CGFloat(points.count - 1)
+                    break
+                }
+                remaining -= distance
+            }
+            return t
+        }
+
+        func shaft(head: (left: CGPoint, right: CGPoint)) -> CGMutablePath {
+            let base = CGPoint(x: (head.left.x + head.right.x) / 2,
+                               y: (head.left.y + head.right.y) / 2)
+            let path = path(endingAt: shaftEnd(head: head))
+            path.addLine(to: base)
+            return path
+        }
+    }
+
+    static func distance(from point: CGPoint, toArrow annotation: Annotation) -> CGFloat {
+        guard annotation.points.count >= 2 else { return .infinity }
+        guard annotation.points.count > 2 else {
+            return distance(from: point, toSegment: annotation.points[0], annotation.points[1])
+        }
+        let curve = ArrowCurve(from: annotation.points[0], to: annotation.points[1],
+                               through: annotation.points[2])
+        let points = curve.samples
+        return zip(points, points.dropFirst()).reduce(CGFloat.infinity) {
+            min($0, distance(from: point, toSegment: $1.0, $1.1))
+        }
+    }
+
     /// Arrow head as two wing points for a line ending at `tip`. The head
     /// grows with the stroke so thick arrows stay proportionate.
     static func arrowHead(from tail: CGPoint,
@@ -2187,7 +2425,18 @@ enum ScreenshotSupport {
     /// where independently filled shapes would overlap.
     static func arrowSilhouette(from tail: CGPoint,
                                 to tip: CGPoint,
-                                strokeWidth: CGFloat) -> CGPath {
+                                strokeWidth: CGFloat,
+                                through middle: CGPoint? = nil) -> CGPath {
+        if let middle {
+            let curve = ArrowCurve(from: tail, to: tip, through: middle)
+            let head = curve.head(strokeWidth: strokeWidth)
+            let shaft = curve.shaft(head: head).copy(strokingWithWidth: strokeWidth,
+                                                    lineCap: .round, lineJoin: .round, miterLimit: 10)
+            let triangle = CGMutablePath()
+            triangle.addLines(between: [head.left, tip, head.right])
+            triangle.closeSubpath()
+            return shaft.union(triangle)
+        }
         let angle = atan2(tip.y - tail.y, tip.x - tail.x)
         let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
         let baseMid = CGPoint(x: (head.left.x + head.right.x) / 2,
@@ -2224,7 +2473,49 @@ enum ScreenshotSupport {
                                 to tip: CGPoint,
                                 strokeWidth: CGFloat,
                                 style: ArrowStyleID,
-                                seed: UInt64) -> CGPath? {
+                                seed: UInt64,
+                                through middle: CGPoint? = nil) -> CGPath? {
+        if let middle {
+            guard style != .filled else { return nil }
+            let curve = ArrowCurve(from: tail, to: tip, through: middle)
+            let head = curve.head(strokeWidth: strokeWidth)
+            let path = style == .outline || style == .scribbly ? curve.shaft(head: head) : curve.path()
+            if style == .scribbly {
+                // Keep the hand-drawn variation stable as the curve changes.
+                var randomizer = ScribbleRandomizer(seed: seed)
+                let endT = curve.shaftEnd(head: head)
+                let count = curve.samples.count
+                let points = (0..<count).map {
+                    curve.point(at: CGFloat($0) / CGFloat(count - 1) * endT)
+                }
+                let wobbleAmount = min(strokeWidth * 0.35, curve.length * 0.025)
+                let rough = CGMutablePath()
+                rough.move(to: tail)
+                for index in 1..<(points.count - 1) {
+                    let t = CGFloat(index) / CGFloat(points.count - 1)
+                    let wobble = randomizer.signedUnit() * wobbleAmount * sin(.pi * t)
+                    let direction = CGPoint(x: points[index + 1].x - points[index - 1].x,
+                                            y: points[index + 1].y - points[index - 1].y)
+                    let length = max(0.001, hypot(direction.x, direction.y))
+                    rough.addLine(to: CGPoint(x: points[index].x - direction.y / length * wobble,
+                                              y: points[index].y + direction.x / length * wobble))
+                }
+                rough.addLine(to: CGPoint(x: (head.left.x + head.right.x) / 2,
+                                         y: (head.left.y + head.right.y) / 2))
+                rough.addLines(between: roughPath(from: head.left, to: tip, segments: 3,
+                                                  wobble: strokeWidth * 0.22, randomizer: &randomizer))
+                rough.addLines(between: roughPath(from: head.right, to: tip, segments: 3,
+                                                  wobble: strokeWidth * 0.22, randomizer: &randomizer))
+                return rough
+            }
+            path.addLines(between: [head.left, tip, head.right])
+            if style == .outline { path.closeSubpath() }
+            if style == .doubleEnded {
+                let back = curve.head(atStart: true, strokeWidth: strokeWidth)
+                path.addLines(between: [back.left, tail, back.right])
+            }
+            return path
+        }
         let head = arrowHead(from: tail, to: tip, strokeWidth: strokeWidth)
         let path = CGMutablePath()
         switch style {
@@ -2348,6 +2639,108 @@ enum ScreenshotSupport {
                                 + pathPerpendicular.y * sideOffset
                                 + pathDirection.y * forwardOffset)
         }
+    }
+
+    // MARK: - Sloppy shapes
+
+    /// A rectangle drawn by hand: each side is its own gently bowed stroke
+    /// that starts a little before its corner and runs a little past the
+    /// next, the way a pen overshoots. The seed keeps the sketch stable.
+    static func sloppyRectPath(_ rect: CGRect, strokeWidth: CGFloat, seed: UInt64) -> CGPath {
+        let rect = rect.standardized
+        var randomizer = ScribbleRandomizer(seed: seed)
+        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
+        let corners = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                       CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
+        let path = CGMutablePath()
+        for index in 0..<4 {
+            let start = corners[index]
+            let end = corners[(index + 1) % 4]
+            addSloppyStroke(to: path, from: start, to: end, strokeWidth: penWidth,
+                            overshoot: true, randomizer: &randomizer)
+        }
+        return path
+    }
+
+    /// A line drawn by hand: one slightly bowed stroke between the points.
+    static func sloppyLinePath(from start: CGPoint, to end: CGPoint,
+                               strokeWidth: CGFloat, seed: UInt64) -> CGPath {
+        var randomizer = ScribbleRandomizer(seed: seed)
+        let path = CGMutablePath()
+        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
+        addSloppyStroke(to: path, from: start, to: end, strokeWidth: penWidth,
+                        overshoot: false, randomizer: &randomizer)
+        return path
+    }
+
+    private static func addSloppyStroke(to path: CGMutablePath,
+                                        from start: CGPoint,
+                                        to end: CGPoint,
+                                        strokeWidth: CGFloat,
+                                        overshoot: Bool,
+                                        randomizer: inout ScribbleRandomizer) {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length > 0.5 else { return }
+        let direction = CGPoint(x: dx / length, y: dy / length)
+        let normal = CGPoint(x: -direction.y, y: direction.x)
+        // Wobble grows with the stroke but stays a small share of short sides.
+        let jitter = min(max(1, strokeWidth * 0.6), length * 0.06)
+        let extend = overshoot ? min(max(2, strokeWidth * 1.4), length * 0.08) : 0
+        func shifted(_ point: CGPoint, along: CGFloat, across: CGFloat) -> CGPoint {
+            CGPoint(x: point.x + direction.x * along + normal.x * across,
+                    y: point.y + direction.y * along + normal.y * across)
+        }
+        let from = shifted(start,
+                           along: -extend * (0.4 + 0.6 * abs(randomizer.signedUnit())),
+                           across: randomizer.signedUnit() * jitter * 0.6)
+        let to = shifted(end,
+                         along: extend * (0.4 + 0.6 * abs(randomizer.signedUnit())),
+                         across: randomizer.signedUnit() * jitter * 0.6)
+        let bow = randomizer.signedUnit() * min(jitter * 1.6, length * 0.035)
+        let first = shifted(start, along: length * (0.3 + randomizer.signedUnit() * 0.06),
+                            across: bow + randomizer.signedUnit() * jitter * 0.35)
+        let second = shifted(start, along: length * (0.7 + randomizer.signedUnit() * 0.06),
+                             across: bow * 0.6 + randomizer.signedUnit() * jitter * 0.35)
+        path.move(to: from)
+        path.addCurve(to: to, control1: first, control2: second)
+    }
+
+    /// An ellipse drawn by hand in one loop: the radius drifts a little as
+    /// the pen goes round, and the stroke runs past its start without
+    /// closing, like a circle drawn around something on paper.
+    static func sloppyEllipsePath(_ rect: CGRect, strokeWidth: CGFloat, seed: UInt64) -> CGPath {
+        let rect = rect.standardized
+        var randomizer = ScribbleRandomizer(seed: seed)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radiusX = rect.width / 2
+        let radiusY = rect.height / 2
+        let path = CGMutablePath()
+        guard radiusX > 0.5, radiusY > 0.5 else { return path }
+        let penWidth = strokeWidth * (0.8 + abs(randomizer.signedUnit()) * 0.6)
+        let startAngle = CGFloat.pi * (1.05 + randomizer.signedUnit() * 0.2)
+        let sweep = CGFloat.pi * 2 * (1.08 + abs(randomizer.signedUnit()) * 0.07)
+        let shortSide = min(radiusX, radiusY)
+        // The loop starts slightly inside and ends slightly outside, so the
+        // overlap reads as a pen passing its own start.
+        let drift = min(max(1.5, penWidth * 0.9), shortSide * 0.12)
+        let waveAmount = min(max(0.8, penWidth * 0.45), shortSide * 0.06)
+        let wavePhase = randomizer.signedUnit() * .pi
+        let tilt = randomizer.signedUnit() * 0.05
+        let steps = 72
+        for step in 0...steps {
+            let progress = CGFloat(step) / CGFloat(steps)
+            let angle = startAngle + sweep * progress
+            let wave = sin(angle * 2 + wavePhase) * waveAmount
+            let offset = -drift / 2 + drift * progress + wave
+            let x = cos(angle) * (radiusX + offset)
+            let y = sin(angle) * (radiusY + offset)
+            let point = CGPoint(x: center.x + x * cos(tilt) - y * sin(tilt),
+                                y: center.y + x * sin(tilt) + y * cos(tilt))
+            if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
     }
 
     /// Distance from a point to a segment, for hit-testing lines and arrows.

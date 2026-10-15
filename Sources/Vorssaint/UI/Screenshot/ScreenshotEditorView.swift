@@ -397,6 +397,7 @@ struct ScreenshotEditorView: View {
                 drag.update(to: value.location)
                 let isTap = drag.isTap(for: model.tool)
                 if isTap, model.tool == .text || model.tool == .sticker || model.tool == .counter,
+                   model.draftID == nil,
                    !CGRect(origin: .zero, size: model.imageSize).contains(point) {
                     return
                 }
@@ -506,8 +507,10 @@ struct ScreenshotEditorView: View {
         cg.setLineWidth(1.5 * scale)
         cg.setLineDash(phase: 0, lengths: [4 * scale, 3 * scale])
         if selected.points.count >= 2, selected.tool != .freehand {
-            for point in selected.points.prefix(2) {
-                cg.setFillColor(CGColor(gray: 1, alpha: 1))
+            for (index, point) in ScreenshotSupport.annotationPointHandles(selected).enumerated() {
+                cg.setFillColor(index == 2
+                    ? CGColor(srgbRed: 0.04, green: 0.52, blue: 1, alpha: 1)
+                    : CGColor(gray: 1, alpha: 1))
                 let handle = CGRect(x: point.x - 4 * scale, y: point.y - 4 * scale,
                                     width: 8 * scale, height: 8 * scale)
                 cg.fillEllipse(in: handle)
@@ -534,8 +537,9 @@ struct ScreenshotEditorView: View {
 
     private func counterBox(_ annotation: ScreenshotSupport.Annotation) -> CGRect {
         let diameter = ScreenshotSupport.counterDiameter(for: model.imageSize, scale: 1)
-        return CGRect(x: annotation.rect.midX - diameter / 2,
-                      y: annotation.rect.midY - diameter / 2,
+        let center = ScreenshotSupport.counterCenter(annotation)
+        return CGRect(x: center.x - diameter / 2,
+                      y: center.y - diameter / 2,
                       width: diameter,
                       height: diameter).insetBy(dx: -3, dy: -3)
     }
@@ -574,6 +578,9 @@ struct ScreenshotEditorView: View {
             let fontSize = max(11, ScreenshotRenderer.fontSize(for: annotation.textSize,
                                                                scale: model.scale) * zoom)
             let pad = model.backdropPaddingPixels
+            let inset = ScreenshotRenderer.textInsets(textSize: annotation.textSize,
+                                                      scale: model.scale,
+                                                      style: annotation.textStyle)
             TextField(strings.textPlaceholder, text: $editingText)
                 .textFieldStyle(.plain)
                 .font(.system(size: fontSize, weight: .semibold))
@@ -588,8 +595,8 @@ struct ScreenshotEditorView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1)
                 )
-                .offset(x: (annotation.rect.minX + pad) * zoom - 6,
-                        y: (annotation.rect.minY + pad) * zoom - 3)
+                .offset(x: (annotation.rect.minX + pad + inset.width) * zoom - 6,
+                        y: (annotation.rect.minY + pad + inset.height) * zoom - 3)
                 .onAppear {
                     editingText = annotation.text
                     DispatchQueue.main.async { textFieldFocused = true }
@@ -885,17 +892,38 @@ struct ScreenshotEditorView: View {
 
     private var showsColorControls: Bool {
         switch model.tool {
-        case .arrow, .line, .rect, .ellipse, .freehand, .highlight, .text, .counter, .redact:
+        case .arrow, .line, .rect, .ellipse, .freehand, .highlight, .text, .counter, .redact,
+             .ruler:
             return true
         case .select:
-            guard let selectedID = model.selectedID,
-                  let selected = model.annotations.first(where: { $0.id == selectedID })
-            else { return false }
-            return selected.tool != .sticker
-                && selected.tool != .pixelate
-        case .sticker, .pixelate, .crop:
+            guard let selected = selectedAnnotation else { return false }
+            return ScreenshotSupport.selectionStyle(for: selected).color != nil
+        case .sticker, .pixelate, .crop, .spotlight, .magnifier:
             return false
         }
+    }
+
+    private var selectedAnnotation: ScreenshotSupport.Annotation? {
+        guard let selectedID = model.selectedID else { return nil }
+        return model.annotations.first(where: { $0.id == selectedID })
+    }
+
+    /// The tool whose style controls apply: the active creation tool, or
+    /// the kind of mark the select tool has picked.
+    private var styledTool: ScreenshotSupport.Tool? {
+        model.tool == .select ? selectedAnnotation?.tool : model.tool
+    }
+
+    private var showsFillControls: Bool {
+        styledTool == .rect || styledTool == .ellipse
+    }
+
+    private var showsSloppyControls: Bool {
+        styledTool?.drawsSloppy == true
+    }
+
+    private var showsTextStyleControls: Bool {
+        styledTool == .text
     }
 
     private var showsBlurControls: Bool {
@@ -1007,6 +1035,15 @@ struct ScreenshotEditorView: View {
                 stickerMenu
                 Divider().frame(height: 16)
             }
+            if showsFillControls || showsSloppyControls {
+                if showsFillControls { shapeFillMenu }
+                if showsSloppyControls { sloppyButton }
+                Divider().frame(height: 16)
+            }
+            if showsTextStyleControls {
+                textStyleMenu
+                Divider().frame(height: 16)
+            }
             if showsBlurControls {
                 blurStyleMenu
                 blurTextOnlyButton
@@ -1088,6 +1125,89 @@ struct ScreenshotEditorView: View {
         .fixedSize()
         .screenshotSafeHelp(strings.arrowStyleLabel)
         .accessibilityLabel(strings.arrowStyleLabel)
+    }
+
+    /// Outline, tinted or solid, picked like an arrow style.
+    private var shapeFillMenu: some View {
+        Menu {
+            Picker(strings.shapeFillLabel, selection: $model.shapeFill) {
+                ForEach(ScreenshotSupport.ShapeFillID.allCases, id: \.self) { fill in
+                    Label(strings.shapeFillTitle(fill), systemImage: fill.screenshotSymbolName)
+                        .tag(fill)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: model.shapeFill.screenshotSymbolName)
+                    .font(.system(size: 12, weight: .medium))
+                Text(strings.shapeFillTitle(model.shapeFill))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .screenshotSafeHelp(strings.shapeFillLabel)
+        .accessibilityLabel(strings.shapeFillLabel)
+    }
+
+    /// Plain, outlined or on a label, picked like an arrow style.
+    private var textStyleMenu: some View {
+        Menu {
+            Picker(strings.textStyleLabel, selection: $model.textStyle) {
+                ForEach(ScreenshotSupport.TextStyleID.allCases, id: \.self) { style in
+                    Label(strings.textStyleTitle(style), systemImage: style.screenshotSymbolName)
+                        .tag(style)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: model.textStyle.screenshotSymbolName)
+                    .font(.system(size: 12, weight: .medium))
+                Text(strings.textStyleTitle(model.textStyle))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .screenshotSafeHelp(strings.textStyleLabel)
+        .accessibilityLabel(strings.textStyleLabel)
+    }
+
+    /// Hand-drawn rectangles, ellipses and lines, toggled like text only blur.
+    private var sloppyButton: some View {
+        Button {
+            model.sloppy.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "scribble")
+                    .font(.system(size: 12, weight: .medium))
+                Text(strings.sloppyLabel)
+                    .font(.system(size: 11.5, weight: .medium))
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(model.sloppy ? Color.accentColor.opacity(0.20) : .clear)
+            )
+            .foregroundStyle(model.sloppy ? Color.accentColor : Color.primary.opacity(0.65))
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .screenshotSafeHelp(strings.sloppyLabel)
+        .accessibilityLabel(strings.sloppyLabel)
+        .accessibilityAddTraits(model.sloppy ? .isSelected : [])
     }
 
     private var stickerMenu: some View {
@@ -1639,6 +1759,9 @@ extension ScreenshotSupport.Tool {
         case .pixelate: return "aqi.medium"
         case .redact: return "rectangle.fill"
         case .crop: return "crop"
+        case .spotlight: return "flashlight.on.fill"
+        case .magnifier: return "plus.magnifyingglass"
+        case .ruler: return "ruler"
         }
     }
 
@@ -1657,6 +1780,29 @@ extension ScreenshotSupport.Tool {
         case .pixelate: return strings.toolBlur
         case .redact: return strings.toolRedact
         case .crop: return strings.toolCrop
+        case .spotlight: return strings.toolSpotlight
+        case .magnifier: return strings.toolMagnifier
+        case .ruler: return strings.toolRuler
+        }
+    }
+}
+
+extension ScreenshotSupport.ShapeFillID {
+    var screenshotSymbolName: String {
+        switch self {
+        case .outline: return "square"
+        case .translucent: return "square.lefthalf.filled"
+        case .solid: return "square.fill"
+        }
+    }
+}
+
+extension ScreenshotSupport.TextStyleID {
+    var screenshotSymbolName: String {
+        switch self {
+        case .plain: return "textformat"
+        case .outline: return "character.textbox"
+        case .label: return "text.bubble.fill"
         }
     }
 }

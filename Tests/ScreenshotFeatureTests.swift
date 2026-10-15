@@ -2506,7 +2506,8 @@ enum ScreenshotFeatureTests {
         let bigText = ScreenshotSupport.Annotation(tool: .text, stroke: .small, textSize: 48)
         suite.expect(ScreenshotSupport.selectionStyle(for: bigText)
                 == ScreenshotSupport.SelectionStyle(color: .red, stroke: nil,
-                                                    arrowStyle: nil, textSize: 48)
+                                                    arrowStyle: nil, textSize: 48,
+                                                    textStyle: .plain)
                 && ScreenshotSupport.selectionStyle(for: thinArrow).textSize == nil,
                "text exposes its own point size, not the shape thickness")
         suite.expect(ScreenshotRenderer.fontSize(for: 48, scale: 2) == 96
@@ -2911,7 +2912,7 @@ enum ScreenshotFeatureTests {
                 && ScreenshotSupport.joinedWords(recognizedWords, selected: []).isEmpty,
                "out of range or empty selections copy nothing")
         let defaultScreenshotTools = ScreenshotSupport.Tool.allCases
-        suite.expect(defaultScreenshotTools.count == 13
+        suite.expect(defaultScreenshotTools.count == 16
                 && Array(defaultScreenshotTools.prefix(9))
                     == [.select, .arrow, .pixelate, .crop, .text, .sticker,
                         .rect, .highlight, .freehand],
@@ -2919,9 +2920,130 @@ enum ScreenshotFeatureTests {
         let customScreenshotTools = ScreenshotSupport.Tool.ordered(
             from: "crop,arrow,arrow,invalid")
         suite.expect(Array(customScreenshotTools.prefix(2)) == [.crop, .arrow]
-                && customScreenshotTools.count == 13
-                && Set(customScreenshotTools).count == 13,
+                && customScreenshotTools.count == 16
+                && Set(customScreenshotTools).count == 16,
                "a saved screenshot tool order drops invalid duplicates and appends missing tools")
+        let olderOrder = ScreenshotSupport.Tool.ordered(
+            from: "select,arrow,pixelate,crop,text,sticker,rect,highlight,freehand,line,ellipse,counter,redact")
+        suite.expect(Array(olderOrder.suffix(3)) == [.spotlight, .magnifier, .ruler],
+               "a rail order saved before spotlight, magnifier and ruler gains them at the end")
+        suite.expect(ScreenshotSupport.Tool.spotlight.dragsRect
+                && ScreenshotSupport.Tool.magnifier.dragsRect
+                && !ScreenshotSupport.Tool.ruler.dragsRect
+                && ScreenshotSupport.Tool.ruler.dragsSegment,
+               "spotlights and lenses are dragged as areas and rulers between two points")
+        suite.expect(ScreenshotSupport.Tool.allCases.filter(\.drawsSloppy) == [.rect, .line, .ellipse],
+               "rectangles, ellipses and lines are the marks that can be drawn by hand")
+
+        // Sloppy shapes are seeded, so redraws and exports agree.
+        let sloppyBox = CGRect(x: 10, y: 20, width: 200, height: 120)
+        let sloppyRect = ScreenshotSupport.sloppyRectPath(sloppyBox, strokeWidth: 4, seed: 42)
+        suite.expect(sloppyRect == ScreenshotSupport.sloppyRectPath(sloppyBox, strokeWidth: 4, seed: 42)
+                && sloppyRect != ScreenshotSupport.sloppyRectPath(sloppyBox, strokeWidth: 4, seed: 43),
+               "a sloppy rectangle repeats for its seed and varies between seeds")
+        suite.expect(sloppyRect.boundingBoxOfPath.insetBy(dx: -20, dy: -20).contains(sloppyBox)
+                && sloppyBox.insetBy(dx: -20, dy: -20).contains(sloppyRect.boundingBoxOfPath),
+               "a sloppy rectangle stays close to the rectangle it sketches")
+        let sloppyLoop = ScreenshotSupport.sloppyEllipsePath(sloppyBox, strokeWidth: 4, seed: 7)
+        suite.expect(sloppyLoop == ScreenshotSupport.sloppyEllipsePath(sloppyBox, strokeWidth: 4, seed: 7)
+                && sloppyBox.insetBy(dx: -16, dy: -16).contains(sloppyLoop.boundingBoxOfPath)
+                && sloppyLoop.boundingBoxOfPath.width > sloppyBox.width * 0.9,
+               "a sloppy ellipse loops around its box without wandering off")
+        suite.expect(ScreenshotSupport.sloppyEllipsePath(.zero, strokeWidth: 4, seed: 7).isEmpty
+                && ScreenshotSupport.sloppyLinePath(from: .zero, to: .zero, strokeWidth: 4, seed: 1)
+                    .isEmpty,
+               "an empty sloppy shape draws nothing")
+        suite.expect(ScreenshotSupport.Annotation(tool: .rect, sloppy: true).scribbleSeed != 0
+                || ScreenshotSupport.Annotation(tool: .rect, sloppy: true).scribbleSeed != 0,
+               "a new sloppy mark gets its own sketch")
+
+        // Shift snaps two point drags to 45° steps and keeps their length.
+        let snapped = ScreenshotSupport.constrainedSegmentEnd(from: .zero, to: CGPoint(x: 100, y: 8))
+        suite.expect(abs(snapped.y) < 0.001 && abs(snapped.x - hypot(100, 8)) < 0.001,
+               "a nearly flat drag snaps flat")
+        let diagonal = ScreenshotSupport.constrainedSegmentEnd(from: .zero, to: CGPoint(x: 50, y: 42))
+        suite.expect(abs(diagonal.x - diagonal.y) < 0.001,
+               "a nearly diagonal drag snaps to exactly 45°")
+
+        // Numbers with a pointer keep the badge where the drag began.
+        var tailed = ScreenshotSupport.Annotation(tool: .counter,
+                                                  rect: CGRect(x: 5, y: 5, width: 0, height: 0),
+                                                  points: [CGPoint(x: 40, y: 40), CGPoint(x: 140, y: 40)])
+        suite.expect(ScreenshotSupport.counterCenter(tailed) == CGPoint(x: 40, y: 40)
+                && ScreenshotSupport.counterTailTip(tailed, diameter: 30) == CGPoint(x: 140, y: 40),
+               "a dragged number sits at the start and points at the end")
+        tailed.points[1] = CGPoint(x: 45, y: 40)
+        suite.expect(ScreenshotSupport.counterTailTip(tailed, diameter: 30) == nil
+                && ScreenshotSupport.counterCenter(ScreenshotSupport.Annotation(
+                    tool: .counter, rect: CGRect(x: 10, y: 20, width: 0, height: 0)))
+                    == CGPoint(x: 10, y: 20),
+               "a tip inside the badge draws no tail and a clicked number keeps its point")
+        let tailOutline = ScreenshotSupport.counterOutline(center: CGPoint(x: 40, y: 40), diameter: 30,
+                                                           tip: CGPoint(x: 140, y: 40))
+        suite.expect(tailOutline.contains(CGPoint(x: 130, y: 40))
+                && tailOutline.contains(CGPoint(x: 40, y: 40))
+                && !tailOutline.contains(CGPoint(x: 100, y: 60)),
+               "a number's tail runs from the badge to its tip")
+
+        // Lenses stay round, and rulers report capture pixels.
+        suite.expect(ScreenshotSupport.magnifierCircle(in: CGRect(x: 0, y: 0, width: 100, height: 60))
+                == CGRect(x: 20, y: 0, width: 60, height: 60),
+               "a magnifier draws the largest circle that fits its box")
+        suite.expect(ScreenshotSupport.rulerLength(from: .zero, to: CGPoint(x: 30, y: 40)) == 50,
+               "a ruler reports its length in capture pixels")
+        suite.expect(ScreenshotSupport.shapeCornerRadius(for: CGRect(x: 0, y: 0, width: 8, height: 400),
+                                                         scale: 2) == 2
+                && ScreenshotSupport.shapeCornerRadius(for: CGRect(x: 0, y: 0, width: 400, height: 400),
+                                                       scale: 2) == 12,
+               "rounded corners soften big shapes and never swallow thin ones")
+
+        // Style controls carry only what a mark uses.
+        let filledEllipse = ScreenshotSupport.Annotation(tool: .ellipse, fill: .solid, sloppy: true)
+        suite.expect(ScreenshotSupport.selectionStyle(for: filledEllipse).fill == .solid
+                && ScreenshotSupport.selectionStyle(for: filledEllipse).sloppy == true
+                && ScreenshotSupport.selectionStyle(for: ScreenshotSupport.Annotation(tool: .line)).fill == nil
+                && ScreenshotSupport.selectionStyle(for: ScreenshotSupport.Annotation(tool: .arrow)).sloppy == nil,
+               "fill belongs to areas and hand drawing to rectangles, ellipses and lines")
+        let spotlightStyle = ScreenshotSupport.selectionStyle(for: ScreenshotSupport.Annotation(tool: .spotlight))
+        let lensStyle = ScreenshotSupport.selectionStyle(for: ScreenshotSupport.Annotation(tool: .magnifier))
+        suite.expect(spotlightStyle.color == nil && lensStyle.color == nil
+                && ScreenshotSupport.selectionStyle(for: ScreenshotSupport.Annotation(tool: .ruler)).color == .red,
+               "spotlights and lenses have no color and rulers do")
+        let labelText = ScreenshotRenderer.textBounds("Hi", at: .zero, textSize: 19, scale: 1, style: .label)
+        let plainText = ScreenshotRenderer.textBounds("Hi", at: .zero, textSize: 19, scale: 1)
+        suite.expect(labelText.width > plainText.width && labelText.height > plainText.height
+                && ScreenshotRenderer.textBounds("Hi", at: .zero, textSize: 19, scale: 1, style: .outline)
+                    == plainText,
+               "a label's pill answers clicks around its text")
+        // A spotlight dims the capture, never the marks laid over it.
+        let plainContext = CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8,
+                                     bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        plainContext?.setFillColor(CGColor(gray: 1, alpha: 1))
+        plainContext?.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        if let plain = plainContext?.makeImage(),
+           let lit = ScreenshotRenderer.renderExport(
+            baseImage: plain,
+            annotations: [
+                ScreenshotSupport.Annotation(tool: .rect, rect: CGRect(x: 24, y: 24, width: 12, height: 12),
+                                             color: .white, fill: .solid),
+                ScreenshotSupport.Annotation(tool: .spotlight, rect: CGRect(x: 2, y: 2, width: 14, height: 14)),
+            ],
+            blurSources: ScreenshotRenderer.BlurSources(image: plain), scale: 1,
+            annotationShadowsEnabled: false, watermark: ScreenshotSupport.WatermarkStyle(),
+            watermarkImage: nil, style: ScreenshotSupport.BackdropStyle(), fill: .none,
+            downscaleTo1x: false)?.image,
+           let data = lit.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
+            func red(x: Int, y: Int) -> UInt8 { bytes[y * lit.bytesPerRow + x * 4] }
+            suite.expect(red(x: 9, y: 9) > 240 && red(x: 30, y: 30) > 240 && red(x: 20, y: 4) < 140,
+                   "a spotlight keeps its area and later marks bright and dims the rest")
+        } else {
+            suite.expect(false, "a spotlight test capture renders")
+        }
+        suite.expect(ScreenshotSupport.ShapeFillID.sanitized("bogus") == .outline
+                && ScreenshotSupport.TextStyleID.sanitized(nil) == .plain
+                && Defaults.registeredDefaults[DefaultsKey.screenshotLastSloppy] as? Bool == false,
+               "unknown fill and text styles fall back to the plain look")
         suite.expect(ScreenshotSupport.Tool.shortcutTool(number: 1,
                                                    orderRaw: nil,
                                                    enabled: true) == .select

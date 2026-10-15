@@ -94,6 +94,24 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             applyStickerToSelection()
         }
     }
+    @Published var shapeFill: ScreenshotSupport.ShapeFillID {
+        didSet {
+            UserDefaults.standard.set(shapeFill.rawValue, forKey: DefaultsKey.screenshotLastShapeFill)
+            applyStyleToSelection()
+        }
+    }
+    @Published var textStyle: ScreenshotSupport.TextStyleID {
+        didSet {
+            UserDefaults.standard.set(textStyle.rawValue, forKey: DefaultsKey.screenshotLastTextStyle)
+            applyStyleToSelection()
+        }
+    }
+    @Published var sloppy: Bool {
+        didSet {
+            UserDefaults.standard.set(sloppy, forKey: DefaultsKey.screenshotLastSloppy)
+            applyStyleToSelection()
+        }
+    }
     @Published var annotationShadowsEnabled: Bool {
         didSet {
             UserDefaults.standard.set(annotationShadowsEnabled,
@@ -190,6 +208,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
     private var moveOrigin: CGRect = .zero
     private var movePoints: [CGPoint] = []
     private var activeHandle: ScreenshotSupport.Handle?
+    private var activePointIndex: Int?
     private var cropResizeOrigin: CGRect?
     private var cropMoveOrigin: CGRect?
     private var cropSelectionOrigin: CGRect?
@@ -236,6 +255,11 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             defaults.string(forKey: DefaultsKey.screenshotLastArrowStyle))
         sticker = ScreenshotSupport.StickerID.sanitized(
             defaults.string(forKey: DefaultsKey.screenshotLastSticker))
+        shapeFill = ScreenshotSupport.ShapeFillID.sanitized(
+            defaults.string(forKey: DefaultsKey.screenshotLastShapeFill))
+        textStyle = ScreenshotSupport.TextStyleID.sanitized(
+            defaults.string(forKey: DefaultsKey.screenshotLastTextStyle))
+        sloppy = defaults.bool(forKey: DefaultsKey.screenshotLastSloppy)
         annotationShadowsEnabled = defaults.bool(
             forKey: DefaultsKey.screenshotAnnotationShadows)
         let rawStyle = defaults.string(forKey: DefaultsKey.screenshotBackdropStyle) ?? ""
@@ -599,18 +623,35 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             && annotations[index].arrowStyle != arrowStyle
         let textSizeChanged = annotations[index].tool == .text
             && annotations[index].textSize != textSize
+        let textStyleChanged = annotations[index].tool == .text
+            && annotations[index].textStyle != textStyle
         // Marks without a thickness control keep theirs, so picking one never
         // records an edit nobody made.
-        let usesStroke = ScreenshotSupport.selectionStyle(for: annotations[index]).stroke != nil
+        let style = ScreenshotSupport.selectionStyle(for: annotations[index])
+        let usesStroke = style.stroke != nil
         let strokeChanged = usesStroke && annotations[index].stroke != stroke
-        guard annotations[index].color != color
+        let usesColor = style.color != nil
+        let colorChanged = usesColor && annotations[index].color != color
+        let fillChanged = style.fill != nil && annotations[index].fill != shapeFill
+        let sloppyChanged = style.sloppy != nil && annotations[index].sloppy != sloppy
+        guard colorChanged
                 || strokeChanged
                 || arrowStyleChanged
                 || textSizeChanged
+                || textStyleChanged
+                || fillChanged
+                || sloppyChanged
         else { return }
         registerUndo()
-        annotations[index].color = color
+        if usesColor { annotations[index].color = color }
         if usesStroke { annotations[index].stroke = stroke }
+        if fillChanged { annotations[index].fill = shapeFill }
+        if sloppyChanged {
+            annotations[index].sloppy = sloppy
+            if sloppy, annotations[index].scribbleSeed == 0 {
+                annotations[index].scribbleSeed = ScreenshotSupport.randomScribbleSeed()
+            }
+        }
         if annotations[index].tool == .arrow {
             if arrowStyleChanged, arrowStyle == .scribbly {
                 annotations[index].scribbleSeed = ScreenshotSupport.randomScribbleSeed()
@@ -619,11 +660,13 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         }
         if annotations[index].tool == .text {
             annotations[index].textSize = textSize
+            annotations[index].textStyle = textStyle
             annotations[index].rect = ScreenshotRenderer.textBounds(
                 annotations[index].text,
                 at: annotations[index].rect.origin,
                 textSize: textSize,
-                scale: scale)
+                scale: scale,
+                style: textStyle)
         }
     }
 
@@ -673,6 +716,9 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         if let blurStyle = style.blurStyle { self.blurStyle = blurStyle }
         if let blurTextOnly = style.blurTextOnly { self.blurTextOnly = blurTextOnly }
         if let arrowStyle = style.arrowStyle { self.arrowStyle = arrowStyle }
+        if let fill = style.fill { shapeFill = fill }
+        if let textStyle = style.textStyle { self.textStyle = textStyle }
+        if let sloppy = style.sloppy { self.sloppy = sloppy }
         if annotation.tool == .sticker {
             sticker = ScreenshotSupport.StickerID.sanitized(annotation.text)
         }
@@ -710,12 +756,12 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             } else if let draft = cropDraft, draft.contains(point) {
                 cropMoveOrigin = draft
             }
-        case .arrow, .line:
+        case .arrow, .line, .ruler:
             registerUndo()
             dragRegistered = true
             let annotation = ScreenshotSupport.Annotation(
                 tool: tool, points: [point, point], color: color, stroke: stroke,
-                arrowStyle: arrowStyle)
+                arrowStyle: arrowStyle, sloppy: tool == .line && sloppy)
             annotations.append(annotation)
             draftID = annotation.id
         case .freehand:
@@ -725,19 +771,25 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                 tool: tool, points: [point], color: color, stroke: stroke)
             annotations.append(annotation)
             draftID = annotation.id
-        case .rect, .ellipse, .highlight, .pixelate, .redact:
+        case .rect, .ellipse, .highlight, .pixelate, .redact, .spotlight, .magnifier:
             if tool == .pixelate { ensureBlurSample(blurStyle, level: blurLevel) }
             registerUndo()
             dragRegistered = true
             let annotation = ScreenshotSupport.Annotation(
                 tool: tool, rect: CGRect(origin: point, size: .zero),
                 color: color, stroke: stroke, blurLevel: blurLevel,
-                blurStyle: blurStyle, blurTextOnly: blurTextOnly)
+                blurStyle: blurStyle, blurTextOnly: blurTextOnly,
+                fill: shapeFill, sloppy: tool.drawsSloppy && sloppy)
             annotations.append(annotation)
             draftID = annotation.id
         case .text, .sticker, .counter:
             break
         }
+    }
+
+    /// Shift held right now, read at each step of a drag like a drawing app.
+    private var constrainsDrag: Bool {
+        NSEvent.modifierFlags.contains(.shift)
     }
 
     private func beginSelectDrag(at point: CGPoint) {
@@ -751,14 +803,9 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                 moveOrigin = selected.rect
                 return
             }
-            if selected.points.count >= 2 {
-                if hypot(point.x - selected.points[0].x, point.y - selected.points[0].y) < tolerance {
-                    activeHandle = .topLeft
-                    movePoints = selected.points
-                    return
-                }
-                if hypot(point.x - selected.points[1].x, point.y - selected.points[1].y) < tolerance {
-                    activeHandle = .bottomRight
+            for (index, grip) in ScreenshotSupport.annotationPointHandles(selected).enumerated() {
+                if hypot(point.x - grip.x, point.y - grip.y) < tolerance {
+                    activePointIndex = index
                     movePoints = selected.points
                     return
                 }
@@ -804,13 +851,43 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                     ScreenshotSupport.movedRect(origin, by: delta, within: bounds),
                     within: bounds)
             }
-        case .arrow, .line:
-            updateDraft { $0.points = [dragStart, point] }
+        case .arrow, .line, .ruler:
+            let end = constrainsDrag
+                ? ScreenshotSupport.constrainedSegmentEnd(from: dragStart, to: point) : point
+            updateDraft { $0.points = [dragStart, end] }
         case .freehand:
             updateDraft { $0.points.append(point) }
-        case .rect, .ellipse, .highlight, .pixelate, .redact:
-            updateDraft { $0.rect = ScreenshotSupport.selectionRect(from: dragStart, to: point) }
-        case .text, .sticker, .counter:
+        case .rect, .ellipse, .highlight, .pixelate, .redact, .spotlight:
+            let square = constrainsDrag
+            updateDraft {
+                $0.rect = ScreenshotSupport.selectionRect(from: dragStart, to: point, square: square)
+            }
+        case .magnifier:
+            // A lens is always round, so its drag always draws a square.
+            updateDraft {
+                $0.rect = ScreenshotSupport.selectionRect(from: dragStart, to: point, square: true)
+            }
+        case .counter:
+            // Dragging a number gives it a tail from where the drag started
+            // to where it ends, pointing the step at what it numbers.
+            guard point != dragStart else { return }
+            if draftID == nil {
+                registerUndo()
+                dragRegistered = true
+                let annotation = ScreenshotSupport.Annotation(
+                    tool: .counter,
+                    rect: CGRect(x: dragStart.x, y: dragStart.y, width: 0, height: 0),
+                    points: [dragStart, point],
+                    color: color, stroke: stroke, number: 1)
+                annotations.append(annotation)
+                annotations = ScreenshotSupport.renumberingCounters(annotations)
+                draftID = annotation.id
+            } else {
+                let end = constrainsDrag
+                    ? ScreenshotSupport.constrainedSegmentEnd(from: dragStart, to: point) : point
+                updateDraft { $0.points = [dragStart, end] }
+            }
+        case .text, .sticker:
             break
         }
     }
@@ -828,15 +905,15 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             registerUndo()
             dragRegistered = true
         }
+        if let pointIndex = activePointIndex {
+            var points = movePoints
+            if pointIndex == points.count { points.append(point) } else { points[pointIndex] = point }
+            annotations[index].points = points
+            return
+        }
         if let handle = activeHandle {
-            if annotations[index].points.count >= 2 {
-                var points = movePoints
-                if handle == .topLeft { points[0] = point } else { points[1] = point }
-                annotations[index].points = points
-            } else {
-                annotations[index].rect = ScreenshotSupport.resizedRect(
-                    moveOrigin, dragging: handle, to: point)
-            }
+            annotations[index].rect = ScreenshotSupport.resizedRect(
+                moveOrigin, dragging: handle, to: point)
             return
         }
         let delta = CGPoint(x: point.x - dragStart.x, y: point.y - dragStart.y)
@@ -856,6 +933,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         defer {
             draftID = nil
             activeHandle = nil
+            activePointIndex = nil
             cropResizeOrigin = nil
             cropMoveOrigin = nil
             cropSelectionOrigin = nil
@@ -873,9 +951,10 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             if selectExistingAnnotation(at: point) { return }
             registerUndo()
             var annotation = ScreenshotSupport.Annotation(
-                tool: .text, color: color, stroke: stroke, textSize: textSize)
+                tool: .text, color: color, stroke: stroke, textSize: textSize,
+                textStyle: textStyle)
             annotation.rect = ScreenshotRenderer.textBounds("", at: point, textSize: textSize,
-                                                            scale: scale)
+                                                            scale: scale, style: textStyle)
             annotations.append(annotation)
             newTextID = annotation.id
             selectedID = annotation.id
@@ -897,6 +976,19 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             annotations.append(annotation)
             selectedID = annotation.id
         case .counter:
+            if let draftID {
+                if !isTap {
+                    selectedID = draftID
+                    return
+                }
+                // A click that wandered a little is still a click: drop the
+                // tail draft and its undo step, then place a plain number.
+                annotations.removeAll { $0.id == draftID }
+                annotations = ScreenshotSupport.renumberingCounters(annotations)
+                if !undoStack.isEmpty { undoStack.removeLast() }
+                refreshUndoFlags()
+                refreshDirtyState()
+            }
             guard isTap else { return }
             if selectExistingAnnotation(at: point) { return }
             registerUndo()
@@ -907,7 +999,8 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             annotations.append(annotation)
             annotations = ScreenshotSupport.renumberingCounters(annotations)
             selectedID = annotation.id
-        case .arrow, .line, .rect, .ellipse, .highlight, .pixelate, .redact, .freehand:
+        case .arrow, .line, .rect, .ellipse, .highlight, .pixelate, .redact, .freehand,
+             .spotlight, .magnifier, .ruler:
             if isTap {
                 // A tap never leaves a degenerate shape behind; treat it as
                 // picking whatever is under the cursor instead.
@@ -940,7 +1033,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                                     tolerance: tolerance) != nil {
             return true
         }
-        if selected.points.prefix(2).contains(where: {
+        if ScreenshotSupport.annotationPointHandles(selected).contains(where: {
             hypot(point.x - $0.x, point.y - $0.y) < tolerance
         }) {
             return true
@@ -1001,7 +1094,12 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
         let tolerance = 10 * scale
         for annotation in annotations.reversed() {
             switch annotation.tool {
-            case .arrow, .line:
+            case .arrow:
+                if ScreenshotSupport.distance(from: point, toArrow: annotation)
+                    <= tolerance + annotation.stroke.width * scale / 2 {
+                    return annotation.id
+                }
+            case .line, .ruler:
                 guard annotation.points.count >= 2 else { continue }
                 if ScreenshotSupport.distance(from: point,
                                               toSegment: annotation.points[0],
@@ -1015,12 +1113,22 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
                     return annotation.id
                 }
             case .counter:
-                let radius = ScreenshotSupport.counterDiameter(for: imageSize, scale: 1) / 2
-                if hypot(point.x - annotation.rect.midX, point.y - annotation.rect.midY)
-                    <= radius + 4 * scale {
+                let diameter = ScreenshotSupport.counterDiameter(for: imageSize, scale: 1)
+                let center = ScreenshotSupport.counterCenter(annotation)
+                if hypot(point.x - center.x, point.y - center.y) <= diameter / 2 + 4 * scale {
                     return annotation.id
                 }
-        case .rect, .ellipse, .highlight, .pixelate, .redact:
+                if let tip = ScreenshotSupport.counterTailTip(annotation, diameter: diameter),
+                   ScreenshotSupport.distance(from: point, toSegment: center, tip) <= tolerance {
+                    return annotation.id
+                }
+            case .magnifier:
+                let circle = ScreenshotSupport.magnifierCircle(in: annotation.rect.standardized)
+                if hypot(point.x - circle.midX, point.y - circle.midY)
+                    <= circle.width / 2 + tolerance / 2 {
+                    return annotation.id
+                }
+            case .rect, .ellipse, .highlight, .pixelate, .redact, .spotlight:
                 let outer = annotation.rect.insetBy(dx: -tolerance / 2, dy: -tolerance / 2)
                 guard outer.contains(point) else { continue }
                 if includeShapeInteriors {
@@ -1103,7 +1211,8 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
             trimmed,
             at: annotations[index].rect.origin,
             textSize: annotations[index].textSize,
-            scale: scale)
+            scale: scale,
+            style: annotations[index].textStyle)
         newTextID = nil
     }
 
