@@ -548,7 +548,8 @@ enum DefaultsKey {
     static let clipboardHistoryEnabled = "clipboardHistoryEnabled"
     static let clipboardHistoryEntries = "clipboardHistoryEntries"
     static let clipboardHistoryLimit = "clipboardHistoryLimit"
-    static let clipboardHistorySkipSensitive = "clipboardHistorySkipSensitive"
+    // A separate opt-in from the old, enabled-by-default text heuristic.
+    static let clipboardHistoryFilterSensitiveText = "clipboardHistoryFilterSensitiveText"
     static let clipboardHistoryIncludeImagesFiles = "clipboardHistoryIncludeImagesFiles" // capture copied images and files too
     static let clipboardHistoryIgnoredApps = "clipboardHistoryIgnoredApps" // apps whose copies are never saved
     static let clipboardHistoryQuickPreview = "clipboardHistoryQuickPreview"
@@ -1732,7 +1733,7 @@ enum Defaults {
         DefaultsKey.mediaTextLanguageCorrection: true,
         DefaultsKey.clipboardHistoryEnabled: false,
         DefaultsKey.clipboardHistoryLimit: 50,
-        DefaultsKey.clipboardHistorySkipSensitive: true,
+        DefaultsKey.clipboardHistoryFilterSensitiveText: false,
         DefaultsKey.clipboardHistoryIncludeImagesFiles: true,
         DefaultsKey.clipboardHistoryIgnoredApps: [String](),
         DefaultsKey.windowLayoutIgnoredApps: [String](),
@@ -1940,6 +1941,7 @@ enum Defaults {
 
     static func register() {
         let defaults = UserDefaults.standard
+        migrateClipboardSensitiveTextOptIn(in: defaults)
         migrateNotchAgentsOptIn(in: defaults)
         migrateExistingNotchDefaults(in: defaults)
         migrateLiquidGlassIsland(in: defaults)
@@ -1973,6 +1975,13 @@ enum Defaults {
         // The "all apps" output choice now lasts one session; a saved one
         // would move apps that chose their own output after every launch.
         defaults.removeObject(forKey: DefaultsKey.mixerUniversalOutputDevice)
+    }
+
+    /// Start text filtering off for existing installations as well. A distinct
+    /// key keeps older backups from re-enabling the previous on-by-default
+    /// heuristic, while preserving choices made after this update.
+    static func migrateClipboardSensitiveTextOptIn(in defaults: UserDefaults) {
+        defaults.removeObject(forKey: "clipboardHistorySkipSensitive")
     }
 
     /// Keep the implicit on choice of an existing island profile. A new

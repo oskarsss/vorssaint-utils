@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-The window switcher offers column limits and clearer app filtering. Screenshots copy text, recordings export longer GIFs and isolate window audio, and mixer sliders follow perceived loudness. AI Agents supports OpenCode 2 and safer Claude renewal estimates. Dynamic Island improves lyrics, companion playback and keyboard focus. Command Bar opens and searches faster. Cleaning Mode keeps input taps suspended, alongside fixes for clipboard pastes, display brightness, recording, app updates, Homebrew installs, volume keys, mouse navigation, Dock instances and M4 Pro temperatures.
+The window switcher offers column limits and clearer app filtering. Screenshots copy text, recordings export longer GIFs and isolate window audio, and mixer sliders follow perceived loudness. AI Agents supports OpenCode 2 and safer Claude renewal estimates. Dynamic Island improves lyrics, companion playback and keyboard focus. Command Bar opens and searches faster. Clipboard history leaves sensitive-text guessing off by default. Cleaning Mode keeps input taps suspended, alongside fixes for clipboard pastes, display brightness, recording, app updates, Homebrew installs, volume keys, mouse navigation, Dock instances and M4 Pro temperatures.
 
 ### Added
 - Dynamic Island can show the keyboard input source when it changes. Command Bar's temporary layout switches stay quiet. Settings → Dynamic Island → Activity → Indicators.
@@ -15,6 +15,7 @@ The window switcher offers column limits and clearer app filtering. Screenshots 
 - Screenshot previews can copy the text in a capture when Screen OCR is installed.
 
 ### Changed
+- Clipboard history's sensitive-text filter now starts off, including after upgrading or restoring an older backup. It can be enabled in Settings → Clipboard. Copies marked as confidential and ignored apps remain excluded.
 - Command Bar opens and searches faster, with the same matching and ranking rules.
 - Save as GIF and Copy as GIF work for recordings of any length.
 - With Show only the current desktop on, the window switcher also lists fullscreen windows from other desktops while Show fullscreen windows is on.
@@ -22,6 +23,7 @@ The window switcher offers column limits and clearer app filtering. Screenshots 
 - Recording a single window captures only the sound of the app that owns it.
 
 ### Fixed
+- Clipboard history's optional sensitive-text filter no longer rejects commands, terminal output and links merely for mentioning words such as "token" or "password".
 - Paste as plain text and snippets cancel when a newer copy replaces the clipboard before the paste.
 - Recordings and exports fall back to H.264 when the Mac cannot encode their size in HEVC. Recording startup prepares the encoder without freezing the interface.
 - App Updates opens destinations without freezing the interface and preserves the return to its window when requests overlap.
