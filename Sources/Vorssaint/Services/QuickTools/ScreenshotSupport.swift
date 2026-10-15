@@ -2747,8 +2747,9 @@ enum ScreenshotSupport {
                 let landing = attack > 0 ? eased(distance / attack) : 1
                 let lifting = release > 0 ? eased((total - distance) / release) : 1
                 let taper = (entry + (1 - entry) * landing) * (exit + (1 - exit) * lifting)
-                let pressure = 1 + 0.17 * sin(2 * .pi * progress * frequencies.0 + phases.0)
-                    + 0.08 * sin(2 * .pi * progress * frequencies.1 + phases.1)
+                let sway: CGFloat = 0.17 * sin(2 * .pi * progress * frequencies.0 + phases.0)
+                let flutter: CGFloat = 0.08 * sin(2 * .pi * progress * frequencies.1 + phases.1)
+                let pressure = 1 + sway + flutter
                 let before = points[max(0, index - 1)]
                 let after = points[min(points.count - 1, index + 1)]
                 let heading = atan2(after.y - before.y, after.x - before.x)
@@ -2934,12 +2935,18 @@ enum ScreenshotSupport {
         let reach = hypot(control.x - start.x, control.y - start.y)
             + hypot(end.x - control.x, end.y - control.y)
         let count = max(2, Int(ceil(reach * abs(to - from) / 2)))
-        return (0...count).map { step in
-            let t = from + (to - from) * CGFloat(step) / CGFloat(count)
-            let u = 1 - t
-            return CGPoint(x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
-                           y: u * u * start.y + 2 * u * t * control.y + t * t * end.y)
+        var points: [CGPoint] = []
+        points.reserveCapacity(count + 1)
+        for step in 0...count {
+            let t: CGFloat = from + (to - from) * CGFloat(step) / CGFloat(count)
+            let u: CGFloat = 1 - t
+            let startWeight: CGFloat = u * u
+            let controlWeight: CGFloat = 2 * u * t
+            let endWeight: CGFloat = t * t
+            points.append(CGPoint(x: startWeight * start.x + controlWeight * control.x + endWeight * end.x,
+                                  y: startWeight * start.y + controlWeight * control.y + endWeight * end.y))
         }
+        return points
     }
 
     // MARK: - Sloppy shapes
