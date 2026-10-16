@@ -139,7 +139,7 @@ private struct CalendarProbeFixture: View {
     var body: some View {
         NotchCalendarMonthGrid(month: focus, selectedDay: focus, now: initial, height: 220,
                                events: events, text: FeatureStrings.notchCalendar(.enUS),
-                               select: { focus = $0 }, move: { _ in }, today: {}, open: {}, week: {},
+                               select: { focus = $0 },
                                settled: { focus = $0 })
     }
 }
@@ -155,9 +155,9 @@ private struct CalendarWeekProbeFixture: View {
     }
     var body: some View {
         VStack(spacing: 12) {
-            NotchCalendarWeekStrip(width: 540, focus: focus, selectedDay: focus, now: initial,
+            NotchCalendarWeekStrip(focus: focus, selectedDay: focus, now: initial,
                                    events: events, text: FeatureStrings.notchCalendar(.enUS),
-                                   select: { focus = $0 }, move: { _ in }, today: {}, week: {}, month: {}, open: {},
+                                   select: { focus = $0 }, week: {},
                                    browse: { focus = $0 })
             Text(focus, format: .dateTime.weekday(.wide).day().month(.wide).year())
                 .font(.system(size: 12)).foregroundStyle(.white)

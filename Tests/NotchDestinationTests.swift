@@ -105,8 +105,6 @@ enum NotchDestinationContract {
         var showingCommandBar = false
         var commandBarClosings = 0
         func commandBarDidClose() { commandBarClosings += 1 }
-        func mascotBridgeStart(opening: Bool) -> CGFloat? { nil }
-        func bridgeMascot(from: CGFloat, opening: Bool) {}
         var sectionQuery = ""
         var sectionRow = 0
         var highlightedSection: NotchModule?
@@ -263,6 +261,34 @@ enum NotchDestinationContract {
         sessionContracts(suite)
         lockScreenContracts(defaults: defaults, suite: suite)
         shortcutContracts(defaults: defaults, suite: suite)
+        captureControlsContracts(suite)
+    }
+
+    /// The capture controls cover the open page and hold collapsing off. While
+    /// they are up, a route that opens the island expands them instead, so no
+    /// page waits behind them to open by itself once they end.
+    private static func captureControlsContracts(_ suite: TestSuite) {
+        let shortcuts: [(String, NotchModule, (Service) -> Bool)] = [
+            ("Clipboard", .clipboard, { $0.showClipboard(toggle: true) }),
+            ("Scratchpad", .scratchpad, { $0.showScratchpad(toggle: true) }),
+            ("quick panel", .tools, { $0.openQuickPanel(toggle: true) }),
+            ("shelf", .files, { $0.openShelf(toggle: true) }),
+        ]
+        for (name, module, press) in shortcuts {
+            let service = Service()
+            service.captureControls = NSObject()
+            let presses = (0..<2).map { _ in press(service) && !service.expanded }
+            suite.expect(presses == [true, true] && service.captureControlsExpansions == 2,
+                         "the \(name) shortcut expands the capture controls on every press instead of opening the island behind them")
+            service.captureControls = nil
+            suite.expect(press(service) && service.expanded && service.selected == module,
+                         "once the capture controls end, the \(name) shortcut opens its page")
+        }
+        let page = Service()
+        page.captureControls = NSObject()
+        page.open(.music)
+        suite.expect(!page.expanded && page.captureControlsExpansions == 1,
+                     "opening a page while the capture controls are up expands them instead")
     }
 
     /// Escape steps back through what the island shows, then closes it.

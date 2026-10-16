@@ -11,6 +11,7 @@ struct NotchCalendarView: View {
     @ObservedObject private var calendar = NotchCalendarService.shared
     @ObservedObject private var permissions = Permissions.shared
     @AppStorage(DefaultsKey.notchCalendarCountdown) private var countdownForEvery = false
+    @Environment(\.notchBand) private var band
     /// The day the month grid or the week strip is built around.
     @State private var focus = Date()
     @State private var selectedDay: Date?
@@ -28,7 +29,8 @@ struct NotchCalendarView: View {
                     Group {
                         if showsMonth {
                             HStack(alignment: .top, spacing: 16) {
-                                monthView(now: context.date)
+                                ScrollView { monthView(now: context.date) }
+                                    .scrollIndicators(.automatic)
                                     .frame(width: 196)
                                 Rectangle().fill(.white.opacity(0.12)).frame(width: 1)
                                     .accessibilityHidden(true)
@@ -51,6 +53,9 @@ struct NotchCalendarView: View {
                         if selectedDay == nil { focus = context.date }
                     }
                 }
+                // The month's name and the way through it head the page from
+                // the island's top row, the same in all three layouts.
+                .notchBand { monthTitle } trailing: { navigation }
             } else {
                 permissionCard
             }
@@ -84,37 +89,25 @@ struct NotchCalendarView: View {
 
     private func monthView(now: Date) -> some View {
         NotchCalendarMonthView(month: focus, selectedDay: selectedDay, now: now,
-                               height: size.height - 12,
-                               events: calendar.events, text: text, select: select, move: moveMonth) {
-            today(now: now)
-        } open: {
-            openCalendar()
-        } browse: { prefetch($0) } settled: { browse($0) }
-        .padding(.bottom, 12)
-        .frame(maxHeight: .infinity, alignment: .top)
+                               events: calendar.events, text: text, select: select,
+                               browse: prefetch, settled: browse)
     }
 
     private func weekStrip(now: Date) -> some View {
-        NotchCalendarWeekStrip(width: size.width, focus: focus, selectedDay: selectedDay, now: now,
-                               events: calendar.events, text: text, select: select, move: moveWeek,
-                               today: { today(now: now) }, week: {
+        NotchCalendarWeekStrip(focus: focus, selectedDay: selectedDay, now: now,
+                               events: calendar.events, text: text, select: select, week: {
             selectedDay = nil
             focus = now
-        }, month: { showingMonth = true }, open: { openCalendar() }, browse: browse)
+        }, browse: browse)
     }
 
-    /// The fixed header surrounds a rolling date document. Alignment helps
-    /// only when native momentum finishes very close to a month boundary.
+    /// Picking a day lands back on the strip with that day.
     private func monthGrid(now: Date) -> some View {
         NotchCalendarMonthGrid(month: focus, selectedDay: selectedDay, now: now, height: size.height,
                                events: calendar.events, text: text, select: { date in
             select(date)
             showingMonth = false
-        }, move: moveMonth, today: {
-            today(now: now)
-            showingMonth = false
-        }, open: { openCalendar() }, week: { showingMonth = false }, browse: prefetch, settled: browse)
-        .frame(height: size.height)
+        }, browse: prefetch, settled: browse)
     }
 
     private func prefetch(_ date: Date) {
@@ -123,21 +116,83 @@ struct NotchCalendarView: View {
     }
 
     private func browse(_ date: Date) {
-        // Browsing updates the event read and agenda without resetting the
-        // native document's offset. Its coordinator recognizes this readback.
+        // The native scroll coordinator recognizes this readback and keeps its offset.
         selectedDay = Calendar.current.startOfDay(for: date)
         focus = date
     }
 
+    /// The month the page shows, named in the language's own words: in full
+    /// where the row has room, abbreviated where the camera leaves less. Over
+    /// the week strip it opens the month grid, and over that grid it closes it.
+    private var monthTitle: some View {
+        let title = ViewThatFits(in: .horizontal) {
+            Text(focus, format: .dateTime.month(.wide).year())
+            Text(focus, format: .dateTime.month(.abbreviated).year())
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .lineLimit(1)
+        // The row is drawn by the island, outside this page's own locale.
+        .environment(\.locale, l10n.language.formattingLocale())
+        return Group {
+            if showsMonth {
+                title.accessibilityAddTraits(.isHeader)
+            } else {
+                Button { showingMonth.toggle() } label: {
+                    title
+                        .padding(.horizontal, 7)
+                        .frame(height: 28)
+                        .background(.white.opacity(showingMonth ? 0.12 : 0),
+                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(NotchButtonStyle(cornerRadius: 9))
+                .help(text.month)
+                .accessibilityHint(text.month)
+                .accessibilityAddTraits(showingMonth ? .isSelected : [])
+            }
+        }
+    }
+
+    /// Calendar itself follows the arrows where the row has room for four
+    /// buttons, the last one apart; the island's own update or pin give way
+    /// to it. Elsewhere an empty agenda offers it, and every appointment card
+    /// opens it as well.
+    private var rowOpensCalendar: Bool { !band.besideCamera || band.side >= 28 * 4 + 6 }
+
+    /// The arrows step by week over the strip and by month over a grid,
+    /// around the way back to today, as Calendar's own toolbar does.
+    private var navigation: some View {
+        let byWeek = !showsMonth && !showingMonth
+        return HStack(spacing: 6) {
+            HStack(spacing: 0) {
+                NotchIconButton(symbol: "chevron.left", title: byWeek ? text.previousWeek : text.previousMonth) {
+                    byWeek ? moveWeek(-1) : moveMonth(-1)
+                }
+                NotchIconButton(symbol: "circle.circle", title: text.today) {
+                    today(now: Date())
+                    showingMonth = false
+                }
+                NotchIconButton(symbol: "chevron.right", title: byWeek ? text.nextWeek : text.nextMonth) {
+                    byWeek ? moveWeek(1) : moveMonth(1)
+                }
+            }
+            if rowOpensCalendar {
+                NotchIconButton(symbol: "arrow.up.forward.app", title: text.openCalendar) { openCalendar() }
+            }
+        }
+    }
+
     private func moveWeek(_ offset: Int) {
         guard let date = Calendar.current.date(byAdding: .day, value: offset * 7, to: focus) else { return }
-        select(date)
+        selectedDay = Calendar.current.startOfDay(for: date)
+        focus = date
     }
 
     private func moveMonth(_ offset: Int) {
         guard let start = Calendar.current.dateInterval(of: .month, for: focus)?.start,
               let date = Calendar.current.date(byAdding: .month, value: offset, to: start) else { return }
-        select(date)
+        selectedDay = date
+        focus = date
     }
 
     private func select(_ date: Date) {
@@ -250,9 +305,15 @@ struct NotchCalendarView: View {
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(.white.opacity(0.45))
                 .accessibilityHidden(true)
-            Text(selectedDay == nil ? text.empty : text.emptyDay)
-                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.65))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(selectedDay == nil ? text.empty : text.emptyDay)
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+                // With no card to open it from and no room for it in the row.
+                if !rowOpensCalendar {
+                    NotchPillButton(title: text.openCalendar) { openCalendar() }
+                }
+            }
         }
         .padding(.horizontal, 12)
     }

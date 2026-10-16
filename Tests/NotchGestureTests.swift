@@ -771,8 +771,8 @@ enum NotchGestureTests {
             defaults.set(numbered, forKey: DefaultsKey.notchCalendarWeekNumbers)
             for height: CGFloat in [300, 316, 334, 400] {
                 let view = NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
-                                                 height: height - 12, events: [], text: FeatureStrings.notchCalendar(.enUS),
-                                                 select: { _ in }, move: { _ in }, today: {}, open: {})
+                                                 events: [], text: FeatureStrings.notchCalendar(.enUS),
+                                                 select: { _ in })
                     .defaultAppStorage(defaults)
                     .padding(.bottom, 12).frame(width: 196).fixedSize(horizontal: false, vertical: true)
                 let host = NSHostingView(rootView: view)
@@ -783,7 +783,7 @@ enum NotchGestureTests {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.03))
                 host.layoutSubtreeIfNeeded()
                 suite.expect(host.fittingSize.height <= height + 0.01,
-                             "the wide month's header, six date rows, footer and padding fit a \(height)-point page")
+                             "the wide month's six date rows and padding fit a \(height)-point page")
                 func findCanvas(_ view: NSView) -> CalendarMonthCanvasView? {
                     if let canvas = view as? CalendarMonthCanvasView,
                        host.bounds.intersects(host.convert(canvas.bounds, from: canvas)) { return canvas }
@@ -1091,12 +1091,12 @@ enum NotchGestureTests {
             let view: AnyView
             if wide {
                 view = AnyView(NotchCalendarMonthView(month: month, selectedDay: nil, now: month,
-                                                     height: size.height, events: [], text: text,
-                                                     select: { _ in }, move: { _ in }, today: {}, open: {}))
+                                                     events: [], text: text,
+                                                     select: { _ in }))
             } else {
                 view = AnyView(NotchCalendarMonthGrid(month: month, selectedDay: nil, now: month,
                                                      height: size.height, events: [], text: text,
-                                                     select: { _ in }, move: { _ in }, today: {}, open: {}, week: {}))
+                                                     select: { _ in }))
             }
             let host = NSHostingView(rootView: view.defaultAppStorage(defaults))
             let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
