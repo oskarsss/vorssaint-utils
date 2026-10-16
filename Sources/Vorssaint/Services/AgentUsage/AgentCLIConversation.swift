@@ -17,6 +17,7 @@ class AgentCLIConversation {
     private let output = Pipe()
     private let deadline: DispatchTime
     private let arrived = DispatchSemaphore(value: 0)
+    private let exited = DispatchSemaphore(value: 0)
     private let lock = NSLock()
     private var buffer = Data()
     private var closed = false
@@ -39,6 +40,7 @@ class AgentCLIConversation {
             if chunk.isEmpty { handle.readabilityHandler = nil }
             self?.receive(chunk)
         }
+        process.terminationHandler = { [exited] _ in exited.signal() }
         do {
             try process.run()
         } catch {
@@ -58,6 +60,12 @@ class AgentCLIConversation {
                 if child.isRunning { kill(child.processIdentifier, SIGKILL) }
             }
         }
+    }
+
+    /// After `end()`: waits for the server to exit, so what it saves on its
+    /// way out is on disk. False when it is still running at the timeout.
+    @discardableResult func waitForExit(timeout: TimeInterval) -> Bool {
+        exited.wait(timeout: .now() + timeout) == .success
     }
 
     func send(_ message: [String: Any]) -> Bool {

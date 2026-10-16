@@ -71,6 +71,8 @@ final class AgentUsageService: ObservableObject {
     private let claudeAccountQueue = DispatchQueue(label: "com.vorssaint.claude-limits", qos: .utility)
     private var claudeAccountRequest: AgentClaudeServer.Request?
     private var claudeAccountAttempted = Date.distantPast
+    /// The AI page is on the island, which asks Claude Code more often.
+    private var pageVisible = false
 
     // Confined to `queue`.
     private var readerSession = -1
@@ -220,8 +222,10 @@ final class AgentUsageService: ObservableObject {
         }
     }
 
-    /// Reads local fallbacks immediately and asks Claude for fresh account limits.
-    func pageDidAppear() {
+    /// Reads local fallbacks immediately and asks Claude for fresh account
+    /// limits. A Settings preview reads too, without counting as the page.
+    func pageDidAppear(preview: Bool = false) {
+        if !preview { pageVisible = true }
         guard running else { return }
         refreshClaudeLimits()
         queue.async { [self] in
@@ -231,6 +235,10 @@ final class AgentUsageService: ObservableObject {
             checkLimits()
             publish()
         }
+    }
+
+    func pageDidDisappear() {
+        pageVisible = false
     }
 
     // MARK: Reading
@@ -554,7 +562,6 @@ final class AgentUsageService: ObservableObject {
                     watch(roots)
                 }
                 lastRootCheck = now
-                readClaudePlan()
             }
             readClaudePlan()
             readClaudeApp(now: now)
@@ -723,7 +730,12 @@ final class AgentUsageService: ObservableObject {
         let desktop = AgentClaudeAppUsage.limits(from: claudeAppSamples, now: now, sessionStart: start,
                                                  organization: claudeOrganization)
         let account = AgentClaudeServer.current(claudeAccountLimits, now: now)
-        if let latest = [desktop, account].compactMap({ $0 }).max(by: { $0.observedAt < $1.observedAt }) {
+        // One source while the account answers. The app's session renewal is
+        // the latest the session can end, so trading places with the exact
+        // one at each save the app makes would read as a new window and warn
+        // again; newer wins once the account reading is old.
+        let recent = account.flatMap { now.timeIntervalSince($0.observedAt) < AgentClaudeAppUsage.freshness ? $0 : nil }
+        if let latest = recent ?? [desktop, account].compactMap({ $0 }).max(by: { $0.observedAt < $1.observedAt }) {
             store.setLimits(latest)
         } else {
             store.clearLimits(.claude)
@@ -731,10 +743,11 @@ final class AgentUsageService: ObservableObject {
     }
 
     // Main thread. Never query while the feature is off, asleep or already
-    // checking. Failures back off; looking at the page does not bypass that.
+    // checking. Every minute only while the page shows; failures back off,
+    // and looking at the page does not bypass that.
     func refreshClaudeLimits(now: Date = Date()) {
         guard running, !paused, providers.contains(.claude), claudeAccountRequest == nil else { return }
-        let interval = claudeAccountFailure == nil ? AgentClaudeServer.freshness : AgentClaudeServer.retryAfter
+        let interval = AgentClaudeServer.interval(after: claudeAccountFailure, pageVisible: pageVisible)
         guard now.timeIntervalSince(claudeAccountAttempted) >= interval else { return }
         claudeAccountAttempted = now
         claudeAccountChecking = true
@@ -772,10 +785,12 @@ final class AgentUsageService: ObservableObject {
     }
 
     private func cancelClaudeLimits() {
-        claudeAccountRequest?.cancel()
+        guard let request = claudeAccountRequest else { return }
+        request.cancel()
         claudeAccountRequest = nil
         claudeAccountChecking = false
-        // Resume gets a new reading instead of waiting for a cancelled check.
+        // Resume asks again instead of waiting out a cancelled check; with
+        // none in flight, the wait after a failure still holds.
         claudeAccountAttempted = .distantPast
     }
 

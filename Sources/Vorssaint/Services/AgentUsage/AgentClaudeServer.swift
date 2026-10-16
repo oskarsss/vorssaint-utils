@@ -5,7 +5,9 @@ import Foundation
 
 /// Reads the same account-wide data as /usage through Claude Code's structured
 /// control protocol. Claude handles authentication itself, including refreshing
-/// its sign-in. No user message, model request, hook, MCP server or tool is run.
+/// its sign-in. No user message, model request, MCP server or tool is run, and
+/// no hook but those an organization manages, which our `disableAllHooks`
+/// cannot turn off.
 enum AgentClaudeServer {
     enum Failure: Error, Equatable {
         case missing, needsSignIn, outdated, unreachable
@@ -15,8 +17,28 @@ enum AgentClaudeServer {
         let organization: String?
     }
     static let timeout: TimeInterval = 25
+    /// While the AI page is on screen a reading this old is asked again.
     static let freshness: TimeInterval = 60
+    /// Otherwise Claude Code starts at most this often, as the Codex check does.
+    static let backgroundFreshness: TimeInterval = 5 * 60
     static let retryAfter: TimeInterval = 5 * 60
+    /// Only the person can install, update or sign in to Claude Code.
+    static let settledRetry: TimeInterval = 30 * 60
+    /// Claude Code answers from the copy it saved, without asking the
+    /// account, while that copy is younger than this.
+    static let reuse: TimeInterval = 60
+    /// The opt-outs a person may keep in Claude Code's user settings, which
+    /// `--setting-sources ""` leaves out of a check.
+    static let optOuts = ["DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"]
+
+    /// How long after the last check Claude Code is asked again.
+    static func interval(after failure: Failure?, pageVisible: Bool) -> TimeInterval {
+        switch failure {
+        case nil: return pageVisible ? freshness : backgroundFreshness
+        case .unreachable?: return retryAfter
+        case .missing?, .needsSignIn?, .outdated?: return settledRetry
+        }
+    }
 
     static func candidates(home: URL, searchPath: String? = nil) -> [URL] {
         let folders = [home.appending(path: ".local/bin").path,
@@ -34,9 +56,44 @@ enum AgentClaudeServer {
     }
 
     static func organization(home: URL) -> String? {
+        profile(home: home).organization
+    }
+
+    /// The organization Claude Code signs in to, and when it last fetched
+    /// the account's usage. After a failed fetch, get_usage answers from
+    /// that saved copy, up to an hour old, with nothing to say so.
+    static func profile(home: URL) -> (organization: String?, usageFetched: Date?) {
         guard let data = try? Data(contentsOf: home.appending(path: ".claude.json")),
-              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-        return (json["oauthAccount"] as? [String: Any])?["organizationUuid"] as? String
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return (nil, nil) }
+        let organization = (json["oauthAccount"] as? [String: Any])?["organizationUuid"] as? String
+        guard let number = (json["cachedUsageUtilization"] as? [String: Any])?["fetchedAtMs"] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite,
+              number.doubleValue > 0 else { return (organization, nil) }
+        return (organization, Date(timeIntervalSince1970: number.doubleValue / 1_000))
+    }
+
+    /// The app's environment for a check: Claude Code never updates itself
+    /// from one, and the opt-outs the person keeps in its user settings
+    /// apply as in their own sessions. Nothing else is turned off.
+    static func environment(_ base: [String: String], home: URL) -> [String: String] {
+        var environment = base
+        environment.removeValue(forKey: "CLAUDECODE")
+        environment["DISABLE_AUTOUPDATER"] = "1"
+        guard let data = try? Data(contentsOf: home.appending(path: ".claude/settings.json")),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let settings = json["env"] as? [String: Any] else { return environment }
+        // Claude Code lets its settings override the environment, and reads
+        // a number or a switch there as text.
+        for key in optOuts {
+            switch settings[key] {
+            case let text as String: environment[key] = text
+            case let number as NSNumber:
+                environment[key] = CFGetTypeID(number) == CFBooleanGetTypeID()
+                    ? (number.boolValue ? "true" : "false") : number.stringValue
+            default: break
+            }
+        }
+        return environment
     }
 
     static func limits(_ result: [String: Any], observed: Date) -> AgentLimits? {
@@ -49,12 +106,16 @@ enum AgentClaudeServer {
             ("seven_day_sonnet", .weekly, 10_080, "Sonnet")].compactMap { key, kind, minutes, scope in
                 guard let window = limits[key] as? [String: Any],
                       let percent = window["utilization"] as? NSNumber,
-                      CFGetTypeID(percent) != CFBooleanGetTypeID(), percent.doubleValue.isFinite,
-                      (0...100).contains(percent.doubleValue),
-                      let end = (window["resets_at"] as? String).flatMap(AgentTimestamp.parse), end > observed else { return nil }
+                      CFGetTypeID(percent) != CFBooleanGetTypeID(), percent.doubleValue.isFinite else { return nil }
+                // An idle window has no renewal yet and keeps its percentage,
+                // as in the Claude app's history; one that renewed before the
+                // reading says nothing about the window now.
+                let resets = window["resets_at"].flatMap { $0 is NSNull ? nil : $0 }
+                let end = (resets as? String).flatMap(AgentTimestamp.parse)
+                guard resets == nil || end.map({ $0 > observed }) == true else { return nil }
                 let id = ["five_hour": "fh", "seven_day": "sd", "seven_day_opus": "so", "seven_day_sonnet": "sn"][key]!
                 return AgentLimitWindow(id: "claude.\(id)", kind: kind, minutes: minutes, scope: scope,
-                                        usedPercent: percent.doubleValue, resetsAt: end)
+                                        usedPercent: min(100, max(0, percent.doubleValue)), resetsAt: end)
             }
         guard !windows.isEmpty else { return nil }
         return AgentLimits(provider: .claude, windows: windows, observedAt: observed, source: .account)
@@ -62,9 +123,15 @@ enum AgentClaudeServer {
 
     /// Expires each window without inventing zero usage after a reset. Remote
     /// work may already have spent part of the next window before we ask again.
+    /// A window without a renewal lasts as it would in the Claude app's
+    /// history: a session's length, or a day.
     static func current(_ reading: AgentLimits?, now: Date) -> AgentLimits? {
         guard var reading else { return nil }
-        reading.windows.removeAll { ($0.resetsAt ?? .distantPast) <= now }
+        let age = now.timeIntervalSince(reading.observedAt)
+        reading.windows.removeAll { window in
+            if let resets = window.resetsAt { return resets <= now }
+            return age >= (window.kind == .session ? TimeInterval(window.minutes ?? 300) * 60 : 86_400)
+        }
         return reading.windows.isEmpty ? nil : reading
     }
 
@@ -85,9 +152,9 @@ enum AgentClaudeServer {
         func run(_ executable: URL, home: URL, environment: [String: String],
                  timeout: TimeInterval = AgentClaudeServer.timeout) -> Result<Summary, Failure> {
             guard !lock.withLock({ cancelled }) else { return .failure(.unreachable) }
+            let started = Date()
             let organization = AgentClaudeServer.organization(home: home)
-            var environment = environment
-            environment.removeValue(forKey: "CLAUDECODE")
+            let environment = AgentClaudeServer.environment(environment, home: home)
             let arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json",
                 "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--mcp-config",
                 "{\"mcpServers\":{}}", "--setting-sources", "", "--settings", "{\"disableAllHooks\":true}"]
@@ -109,10 +176,22 @@ enum AgentClaudeServer {
             }
             return ask(channel, id: "usage", request: ["subtype": "get_usage", "skip_behaviors": true])
                 .flatMap { result in
-                    guard !self.lock.withLock({ self.cancelled }),
-                          organization == AgentClaudeServer.organization(home: home) else { return .failure(.unreachable) }
+                    guard !self.lock.withLock({ self.cancelled }) else { return .failure(.unreachable) }
                     guard result["rate_limits_available"] as? Bool == true else { return .failure(.needsSignIn) }
-                    guard let reading = AgentClaudeServer.limits(result, observed: Date()) else { return .failure(.unreachable) }
+                    // The saved copy is read once Claude Code has exited, so
+                    // what it fetched for this answer is on disk.
+                    channel.end()
+                    channel.waitForExit(timeout: 3)
+                    let saved = AgentClaudeServer.profile(home: home)
+                    guard !self.lock.withLock({ self.cancelled }),
+                          organization == saved.organization else { return .failure(.unreachable) }
+                    // A copy saved before this check began was answered in place
+                    // of the account, which was not reached.
+                    if let fetched = saved.usageFetched, started.timeIntervalSince(fetched) > AgentClaudeServer.reuse {
+                        return .failure(.unreachable)
+                    }
+                    guard let reading = AgentClaudeServer.limits(result, observed: min(Date(), saved.usageFetched ?? Date()))
+                    else { return .failure(.unreachable) }
                     return .success(Summary(limits: reading, organization: organization))
                 }
         }
@@ -125,7 +204,8 @@ enum AgentClaudeServer {
                       let response = message["response"] as? [String: Any], response["request_id"] as? String == id else { continue }
                 guard response["subtype"] as? String == "success" else {
                     let error = (response["error"] as? String ?? "").lowercased()
-                    if error.contains("not supported") || error.contains("unknown") { return .failure(.outdated) }
+                    // A CLI from before the request answers "Unsupported control request subtype".
+                    if error.contains("supported") || error.contains("unknown") { return .failure(.outdated) }
                     if error.contains("auth") || error.contains("login") || error.contains("sign in") { return .failure(.needsSignIn) }
                     return .failure(.unreachable)
                 }
