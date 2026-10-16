@@ -245,7 +245,7 @@ extension NotchAgentStrings {
         claudeLimitsStaleFormat: "The Claude app last checked them %@.",
         claudeLimitsMenuBar: "Claude checks your limits only while its icon is in the menu bar. Turn the icon on in the Claude app settings, and your limits appear here within minutes.",
         claudeLimitsNoApp: "Plan limits come from the Claude app, which is not on this Mac. Until then, the 5-hour session is estimated from Claude Code activity.",
-        claudeLimitsPrivacy: "Claude Code checks your account's limits, including use on other machines, with its own sign-in, which Vorssaint never reads. No prompt is sent. When it cannot check, the percentages the Claude app saves on this Mac are used.",
+        claudeLimitsPrivacy: "Claude Code checks your account’s limits, including use on other machines, with its own sign-in, which Vorssaint never reads. No prompt is sent. When it cannot check, the percentages the Claude app saves on this Mac are used.",
         openClaude: "Open Claude",
         getClaude: "Get the Claude app",
         priceUpdates: "Keep prices up to date",
