@@ -27,11 +27,16 @@ final class AgentUsageStore {
     private var registered: Set<String> = []
     /// Turns whose last step ended expecting more, by log file, with when.
     private var settled: [String: Date] = [:]
+    /// When a model last replied, by the log of the turn it counts toward.
+    private var replies: [String: Date] = [:]
     /// Off while the logs are first read, so history never replays as news.
     var reportsTransitions = false
     /// A turn that ended longer ago than this is history found late, like a
     /// session an agent moved to its archive, not news.
     static let lateEnd: TimeInterval = 5 * 60
+    /// How long the Mac stays offline, awake, before Claude's turns end:
+    /// after a short drop, as when it changes networks, Claude goes on.
+    static let offlineGrace: TimeInterval = 20
     /// How long a quiet turn waits for its work to resume before it is over.
     /// A new Codex task always opens a turn of its own, but a Claude session
     /// resumed after its process was killed reads like work going on, so a
@@ -236,7 +241,11 @@ final class AgentUsageStore {
             billables.append(billable)
             sources.append([source])
         }
-        guard let file, var turn = turns[file] ?? waiting[file],
+        guard let file else { return }
+        // Noted before the turn check, which skips a reply dated before its
+        // turn started: the model answered all the same.
+        replies[file] = max(replies[file] ?? record.date, record.date)
+        guard var turn = turns[file] ?? waiting[file],
               record.date >= turn.started.addingTimeInterval(-1) else { return }
         waiting[file] = nil
         turn.tokens += delta
@@ -290,6 +299,7 @@ final class AgentUsageStore {
             waiting[file] = turn
         }
         waiting = waiting.filter { now.timeIntervalSince($0.value.lastActivity) < Self.resumeWindow(for: $0.value.provider) }
+        replies = replies.filter { turns[$0.key] != nil || waiting[$0.key] != nil }
     }
 
     /// A turn whose last step ended expecting more, with nothing after it
@@ -328,6 +338,32 @@ final class AgentUsageStore {
                 closed = forget(file: file) || closed
             }
         }
+        return closed
+    }
+
+    /// Claude Code retries for minutes without a word while the Mac is
+    /// offline, then gives up; until it does, its turn would count on. Once
+    /// the Mac, offline since `offline`, has been awake that way for
+    /// `offlineGrace`, Claude's turns end without a notice, quiet ones too,
+    /// so a retry that gets through opens a turn of its own. A turn whose
+    /// model replied since then runs on a model on the Mac, and a turn in
+    /// `running` waits on a command that runs here. A Codex turn opens only
+    /// when its task starts, so it could not come back while the task goes
+    /// on, and nothing shows that Copilot retries without a word: both are
+    /// left alone. True when a turn was showing.
+    @discardableResult
+    func closeOfflineTurns(since offline: Date, lasting elapsed: TimeInterval,
+                           keeping running: @autoclosure () -> Set<String> = []) -> Bool {
+        guard elapsed >= Self.offlineGrace else { return false }
+        let commands = running()
+        func ends(_ entry: (key: String, value: AgentLiveSession)) -> Bool {
+            entry.value.provider == .claude && !commands.contains(entry.key)
+                && (replies[entry.key] ?? .distantPast) < offline
+        }
+        let closed = turns.contains(where: ends)
+        turns = turns.filter { !ends($0) }
+        waiting = waiting.filter { !ends($0) }
+        settled = settled.filter { turns[$0.key] != nil || waiting[$0.key] != nil }
         return closed
     }
 
@@ -516,8 +552,10 @@ struct AgentSessionRegistry: Equatable {
 final class AgentLogCursor {
     let path: String
     let provider: AgentProvider
-    /// Subagents and side threads report to a turn another file tracks.
-    let tracksTurns: Bool
+    /// Subagents report to a turn another file tracks.
+    var tracksTurns: Bool {
+        provider == .claude ? parent == nil : (provider == .codex ? !state.codexSubagent : true)
+    }
     /// The session log a Claude subagent works for.
     let parent: String?
     /// Replies still being written and the rows read last, for a database.
@@ -532,14 +570,31 @@ final class AgentLogCursor {
     /// part of it was read. What its old contents gave is still counted, so
     /// its progress is not saved: the next launch reads it as rewritten.
     private(set) var restarted = false
+    /// The log of the thread a Codex subagent works for, and how many logs
+    /// there were when it was looked for. Not saved: a relaunch looks again.
+    private var codexParentLog: String?
+    private var codexParentSearch = -1
 
     init(path: String, provider: AgentProvider) {
         self.path = path
         self.provider = provider
-        let name = (path as NSString).lastPathComponent
         let parent = provider == .claude ? AgentLogCursor.parent(of: path) : nil
         self.parent = parent
-        tracksTurns = provider == .claude ? parent == nil : (provider == .codex ? !name.contains("_") : true)
+    }
+
+    /// The log whose turn a Codex subagent's responses count toward. It can
+    /// be read after the subagent's or move, and a reverted thread goes on in
+    /// a new log, so it is looked for again when a log turns up or the one
+    /// found goes away; the one written last is the thread's current log.
+    func codexParent(among cursors: [String: AgentLogCursor]) -> String? {
+        guard provider == .codex, !state.codexRoot.isEmpty, !tracksTurns else { return nil }
+        if codexParentSearch != cursors.count || codexParentLog.map({ cursors[$0] == nil }) == true {
+            codexParentSearch = cursors.count
+            codexParentLog = cursors.values
+                .filter { $0.provider == .codex && $0.tracksTurns && $0.state.session == state.codexRoot }
+                .max { $0.modified < $1.modified }?.path
+        }
+        return codexParentLog
     }
 
     /// Where reading stopped, at a line boundary: a line still being written
@@ -574,6 +629,7 @@ final class AgentLogCursor {
         discarding = false
         state = AgentLogState()
         fingerprinted = nil
+        codexParentSearch = -1
     }
 
     func fingerprintRead() {
@@ -669,8 +725,9 @@ enum AgentLogReader {
     }
 
     /// Log files changed since `horizon`, newest last so live turns settle
-    /// on the most recent state. Subagents come after every session, so the
-    /// turn each one works for already stands when its responses are read.
+    /// on the most recent state. Claude subagents come after every session,
+    /// so the turn each one works for already stands when its responses are
+    /// read.
     static func discover(_ roots: [AgentLogRoot], since horizon: Date) -> [(path: String, provider: AgentProvider)] {
         var found: [(path: String, provider: AgentProvider, modified: Date, subagent: Bool)] = []
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]

@@ -216,6 +216,7 @@ enum SettingsDirectory {
                                        keywords: [s.menuBarSpacingLabel, s.menuBarHideIconToggle],
                                        featureKeywords: [
                                         (.monitorMemory, [s.monitorMemoryPressureDot]),
+                                        (.monitorNetwork, [FeatureStrings.monitorLayout(language).networkSpeedUnit]),
                                         (.fanControl, [FeatureStrings.fanControl(language).menuBarTitle]),
                                        ]),
             ]),
@@ -249,7 +250,7 @@ enum SettingsDirectory {
                                        featureKeywords: [
                                         (.switcher, [s.switcherEnable, s.switcherInstantSelection,
                                                      s.switcherWindowlessApps,
-                                                     s.switcherShowShortcutHints,
+                                                     s.switcherShowShortcutHints, s.switcherMaxColumns,
                                                      FeatureStrings.switcherAppRules(language).listTitle,
                                                      FeatureStrings.switcherAppRules(language)
                                                         .showWithoutWindows,
@@ -275,6 +276,7 @@ enum SettingsDirectory {
                 SettingsDirectoryItem(page: .windowLayout,
                                       title: FeatureStrings.windowLayout(language).title,
                                       icon: "rectangle.3.group",
+                                      keywords: [WindowStageManagerStrings.localized(language).title, "Stage Manager"],
                                       featureKeywords: [
                                         (.windowLayout, [s.dockClickCycleWindows,
                                                          FeatureStrings.windowLayout(language).edgeSnapEnable,
@@ -286,7 +288,9 @@ enum SettingsDirectory {
                                           FeatureStrings.windowMaximizerExclusions(language).listTitle]),
                                       ]),
                 SettingsDirectoryItem(page: .autoQuit, title: s.autoQuitName, icon: "xmark.rectangle",
-                                      keywords: [s.autoQuitEnable]),
+                                      keywords: [s.autoQuitEnable,
+                                                 FeatureStrings.autoQuitDockApps(language).listTitle,
+                                                 FeatureStrings.autoQuitDockApps(language).caption]),
                 SettingsDirectoryItem(page: .quitProtection,
                                       title: quitProtection.name,
                                       icon: "shield.lefthalf.filled",
@@ -299,6 +303,8 @@ enum SettingsDirectory {
                                        icon: "doc.on.clipboard",
                                        featureKeywords: [
                                         (.clipboardHistory, [FeatureStrings.clipboard(language).limit,
+                                                             FeatureStrings.clipboardRetention(language).title,
+                                                             FeatureStrings.clipboard(language).historyLayout,
                                                              FeatureStrings.clipboard(language).skipSensitive,
                                                              FeatureStrings.clipboard(language).pasteImageAsFile,
                                                              FeatureStrings.clipboard(language).autoClearEnable,
@@ -363,6 +369,7 @@ enum SettingsDirectory {
                                                  FeatureStrings.notchEditor(language).hideMenuBarIcon,
                                                  FeatureStrings.notchActivities(language).keepAwakeActivity,
                                                  FeatureStrings.notchActivities(language).hideTimerCountdown,
+                                                 FeatureStrings.notchCalendar(language).weekNumbers,
                                                  "notch", "camera", "music", "clipboard",
                                                  FeatureStrings.notchAgents(language).title, "Claude", "Codex", "OpenCode", "GitHub Copilot", "AI", "tokens",
                                                  FeatureStrings.notchAgents(language).resetsCard,
@@ -441,9 +448,7 @@ enum SettingsDirectory {
                                       keywords: [s.reviewIntro, s.reviewHighlights]),
                 SettingsDirectoryItem(page: .releaseNotes, title: s.tabReleaseNotes, icon: "sparkles"),
                 SettingsDirectoryItem(page: .support, title: s.tabSupport, icon: "heart.fill",
-                                      keywords: [s.donateButton, s.supportIntroStarButton,
-                                                 s.discordIntroJoinButton,
-                                                 s.communityIntroFollowButton]),
+                                      keywords: [s.donateButton, s.supportIntroStarButton]),
             ]),
         ]
     }

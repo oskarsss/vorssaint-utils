@@ -8,9 +8,6 @@ import SwiftUI
 extension Notification.Name {
     /// A file is being dragged toward the island while it shows where to drop it.
     static let notchMascotDragMoved = Notification.Name("NotchMascotDragMoved")
-    /// The pointer moved over the open island, or left it.
-    static let notchMascotPointerMoved = Notification.Name("NotchMascotPointerMoved")
-    static let notchMascotPointerLeft = Notification.Name("NotchMascotPointerLeft")
     /// An activity takes the place of the companion resting in the closed island.
     static let notchMascotRestYields = Notification.Name("NotchMascotRestYields")
 }
@@ -895,7 +892,6 @@ final class NotchMascotHostView: NSView {
     deinit {
         if let visibilityObserver { NotificationCenter.default.removeObserver(visibilityObserver) }
         if let dragObserver { NotificationCenter.default.removeObserver(dragObserver) }
-        islandObservers.forEach(NotificationCenter.default.removeObserver)
         if let yieldObserver { NotificationCenter.default.removeObserver(yieldObserver) }
         cameoWork?.cancel()
     }
@@ -919,25 +915,6 @@ final class NotchMascotHostView: NSView {
         let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
         mascot.attend(to: NotchMascotSupport.pointerGaze(from: mascot.root.position, to: point, size: mascot.size))
     }
-
-    /// Beside the camera in the open island, its eyes follow the pointer
-    /// anywhere over the island, not only over the row it stands in, and the
-    /// pointer coming back wakes it.
-    var followsIsland = false {
-        didSet {
-            guard followsIsland != oldValue else { return }
-            islandObservers.forEach(NotificationCenter.default.removeObserver)
-            islandObservers = !followsIsland ? [] : [
-                NotificationCenter.default.addObserver(forName: .notchMascotPointerMoved, object: nil, queue: .main) {
-                    [weak self] _ in self?.followIslandPointer()
-                },
-                NotificationCenter.default.addObserver(forName: .notchMascotPointerLeft, object: nil, queue: .main) {
-                    [weak self] _ in self?.mascot.lookAhead(after: 0.25)
-                },
-            ]
-        }
-    }
-    private var islandObservers: [NSObjectProtocol] = []
 
     /// Resting in the closed island, it fades out in the first half of the
     /// crossfade an arriving activity brings, and the strip comes in over the
@@ -971,13 +948,6 @@ final class NotchMascotHostView: NSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + NotchMascotMotion.restCrossfade * 2) { [weak self] in
             self?.layer?.removeAnimation(forKey: "yield")
         }
-    }
-
-    private func followIslandPointer() {
-        guard followsPointer, !mascot.isVisiting, let window else { return }
-        greetPointer()
-        let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
-        mascot.attend(to: NotchMascotSupport.pointerGaze(from: mascot.root.position, to: point, size: mascot.size))
     }
 
     override var isFlipped: Bool { true }
@@ -1265,8 +1235,6 @@ struct NotchMascotTrackView: NSViewRepresentable {
     /// Switched off, the Settings preview shows it asleep: eyes shut, no
     /// blinking, and no eyes for the pointer.
     var awake = true
-    /// Its eyes follow the pointer over the whole open island.
-    var followsIsland = false
     /// It rests in the closed island and fades out early as an activity takes its place.
     var yieldsToActivities = false
 
@@ -1289,7 +1257,6 @@ struct NotchMascotTrackView: NSViewRepresentable {
         }
         view.place(at: CGPoint(x: x, y: track.baseline), visible: visible)
         view.followsPointer = rests && awake
-        view.followsIsland = followsIsland && rests && awake
         view.yieldsToActivities = yieldsToActivities
         // A countdown is watched from the camera's left whatever the side.
         let stand = visit?.kind.watchesTimer == true ? track.leftSide.rest : track.rest
@@ -1310,6 +1277,8 @@ struct NotchMascotTrackView: NSViewRepresentable {
 struct NotchMascotActivityVisit: ViewModifier {
     @ObservedObject var service: NotchService
     let track: NotchMascotTrack?
+    /// The island's own strip, the only one that names its song.
+    var ownStrip = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
@@ -1329,17 +1298,24 @@ struct NotchMascotActivityVisit: ViewModifier {
         let stepsAside = visit != nil && service.mascotStepsAside && !ownWing
         // A countdown is watched from the camera's left whatever the side.
         let rightWing = track?.mirrored == true && visit?.kind.watchesTimer == false
+        // Beside a strip naming its song, the black starts where the words
+        // end, which the cover's inset leaves less room before than spacing.
+        let clearance = ownStrip && !rightWing && service.namedMusicWings != nil
+            ? max(0, NotchMusicStripLayout.coverInset(service.compactActivityGeometry) - NotchMusicStripLayout.spacing) : 0
         content
             .opacity(stepsAside ? 0 : 1)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: stepsAside)
-            .overlay(alignment: .topLeading) {
+            .overlay(alignment: .top) {
                 // Handed back with the strip, halfway home, so what it covered
-                // returns as it goes behind the camera.
+                // returns as it goes behind the camera. Laid out on the
+                // companion's own track, which stays on the camera however far
+                // a strip reaches to one side.
                 if ownWing, service.mascotStepsAside, let track, let hidden {
                     Color.black
-                        .frame(width: rightWing ? track.width - hidden.upperBound : hidden.lowerBound,
+                        .frame(width: rightWing ? track.width - hidden.upperBound : max(0, hidden.lowerBound - clearance),
                                height: track.height)
-                        .offset(x: rightWing ? hidden.upperBound : 0)
+                        .offset(x: rightWing ? hidden.upperBound : clearance)
+                        .frame(width: track.width, alignment: .leading)
                         .transition(.opacity)
                 }
             }

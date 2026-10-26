@@ -13,6 +13,21 @@ import SwiftUI
 import VMStatisticsCompat
 
 enum ClipboardFeatureTests {
+    /// Runs the production placement of the history window on a panel that is
+    /// never shown, against a fixed screen and defaults of its own.
+    final class PanelPlacementHost {
+        enum Screen {
+            static let pointerVisibleFrame = CGRect(x: 0, y: 25, width: 1512, height: 920)
+        }
+        typealias NSScreen = Screen
+        enum UserDefaults {
+            static let name = "com.vorssaint.tests.clipboard-panel"
+            static let standard = Foundation.UserDefaults(suiteName: name)!
+        }
+        var quickLayout = ClipboardHistoryLayout.cards
+        var quickPreviewPresented = false
+    }
+
     /// Runs the production `pasteIntoPreviousApp` with a target app, the
     /// Accessibility grant, the beep and the paste all recorded as events.
     final class QuickPasteHost {
@@ -45,8 +60,134 @@ enum ClipboardFeatureTests {
         static func postPasteShortcut() { host?.events.append("paste") }
     }
 
+    /// Runs the production source check against the apps that came to the
+    /// front since the last look.
+    final class SourceHost {
+        var historyIsRunning = true
+        var candidates: Set<String> = []
+        var lookup: Set<String> = []
+        var historyPanelWasKey = false
+        let ownBundleID: String? = "com.vorssaint.utils"
+        static var front: String?
+        static func frontmostBundleID() -> String? { front }
+    }
+
+    /// Runs the production link cleaning poll against a private pasteboard
+    /// standing in for the general one.
+    enum URLCleanerHost {
+        enum NSPasteboard { static let general = AppKit.NSPasteboard.withUniqueName() }
+        final class PollToken { let isCancelled = false }
+        struct PollResult {
+            let changeCount: Int
+            let cleaned: URLCleaning.Result?
+        }
+        static let urlType = AppKit.NSPasteboard.PasteboardType("public.url")
+        static let rules = URLCleaning.Rules.none
+    }
+
     static func run(_ suite: TestSuite) {
+        ClipboardSensitiveTextPreferenceTests.run(suite)
         ClipboardPreviewContract.run(suite)
+        ClipboardCaptureRestoreTests.run(suite)
+        let source = SourceHost()
+        func sourceCheck(declared: String? = nil, remote: Bool = false,
+                         panelIsKey: Bool = false, panelClosing: Bool = false)
+            -> (excluded: Bool, bundleID: String?, fromHistoryPanel: Bool) {
+            source.sourceSinceLastCheck(declared: declared, remote: remote,
+                                        historyPanelIsKey: panelIsKey, historyPanelClosing: panelClosing)
+        }
+        source.candidates = ["com.apple.Safari"]
+        let single = sourceCheck()
+        suite.expect(single.bundleID == "com.apple.Safari" && !single.excluded,
+                     "a copy made while one app held the front records that app")
+        source.candidates = ["com.apple.Safari", "com.apple.Notes"]
+        suite.expect(sourceCheck().bundleID == nil,
+                     "a copy made while two apps took turns in front records no app rather than a guess")
+        SourceHost.front = "com.apple.Notes"
+        source.candidates = []
+        _ = sourceCheck()
+        suite.expect(sourceCheck().bundleID == "com.apple.Notes",
+                     "the next check starts from the app in front")
+        source.lookup = ["com.example.skipped"]
+        source.candidates = ["com.example.skipped"]
+        suite.expect(sourceCheck().excluded, "a copy from a skipped app is still left out")
+        source.candidates = ["com.example.front"]
+        let declaredSkipped = sourceCheck(declared: "com.example.skipped")
+        suite.expect(declaredSkipped.excluded,
+                     "a copy whose pasteboard names a skipped app is left out even when that app never held the front")
+        source.candidates = ["com.example.front"]
+        let declaredOther = sourceCheck(declared: "com.example.writer")
+        suite.expect(!declaredOther.excluded && declaredOther.bundleID == "com.example.writer",
+                     "a copy naming an app that is not skipped is still recorded under that app")
+        source.lookup = []
+        source.candidates = ["com.apple.Safari"]
+        suite.expect(sourceCheck(declared: "com.vorssaint.utils").bundleID == nil,
+                     "text Vorssaint copies itself, such as recognized text, is not credited to the app in front")
+        source.candidates = ["com.apple.Safari"]
+        suite.expect(sourceCheck(declared: "com.apple.Notes").bundleID == "com.apple.Notes",
+                     "an app that names itself on the pasteboard is believed over the app in front")
+        source.candidates = ["com.example.front"]
+        let emptyMark = sourceCheck(declared: "")
+        source.candidates = ["com.example.front"]
+        let blankMark = sourceCheck(declared: " \n")
+        source.candidates = ["com.example.front"]
+        let oversizedMark = sourceCheck(declared: String(repeating: "a", count: 256))
+        suite.expect(emptyMark.bundleID == "com.example.front" && blankMark.bundleID == "com.example.front"
+                     && oversizedMark.bundleID == "com.example.front",
+                     "an empty or oversized source mark names no app and leaves the guess to the app in front")
+        source.candidates = ["com.example.front"]
+        let remoteCopy = sourceCheck(remote: true)
+        source.candidates = ["com.example.front"]
+        let remoteNamed = sourceCheck(declared: "com.example.writer", remote: true)
+        suite.expect(remoteCopy.bundleID == nil && !remoteCopy.excluded && remoteNamed.bundleID == nil,
+                     "a copy that came from another device is recorded without naming an app on this Mac")
+        source.candidates = ["com.example.front"]
+        let panelCopy = sourceCheck(panelIsKey: true)
+        suite.expect(panelCopy.bundleID == nil && panelCopy.fromHistoryPanel && !panelCopy.excluded,
+                     "a copy made in the history's own panel is not credited to the app behind it")
+        source.candidates = ["com.example.front"]
+        let closingPanelCopy = sourceCheck(panelIsKey: true, panelClosing: true)
+        suite.expect(closingPanelCopy.bundleID == nil && closingPanelCopy.fromHistoryPanel,
+                     "a copy made in the panel just before it closed still counts as the panel's")
+        source.candidates = ["com.example.front"]
+        let afterClosing = sourceCheck()
+        suite.expect(afterClosing.bundleID == "com.example.front" && !afterClosing.fromHistoryPanel,
+                     "a copy made in the app behind right after the panel closed is credited to that app")
+        source.candidates = ["com.example.front"]
+        _ = sourceCheck(panelIsKey: true)
+        source.candidates = ["com.example.front"]
+        let missedClosing = sourceCheck()
+        suite.expect(missedClosing.bundleID == nil && missedClosing.fromHistoryPanel,
+                     "when the panel closed without its own check, the first check after still counts as the panel's")
+        source.candidates = ["com.example.front"]
+        let afterPanel = sourceCheck()
+        suite.expect(afterPanel.bundleID == "com.example.front" && !afterPanel.fromHistoryPanel,
+                     "once the panel is gone the app in front is credited again")
+        source.candidates = ["com.example.front"]
+        let namedInPanel = sourceCheck(declared: "com.example.writer", panelIsKey: true)
+        suite.expect(namedInPanel.bundleID == "com.example.writer" && !namedInPanel.fromHistoryPanel,
+                     "an app that names itself is believed even while the panel holds the keys")
+        source.historyIsRunning = false
+        source.candidates = ["com.apple.Safari"]
+        suite.expect(sourceCheck() == (false, nil, false), "nothing is named while the history is off")
+        // The link cleaner rewrites a copy in place; the app it named stays.
+        let cleanerBoard = URLCleanerHost.NSPasteboard.general
+        cleanerBoard.clearContents()
+        cleanerBoard.setString("com.example.reader", forType: .source)
+        cleanerBoard.setString("https://example.com/path?utm_source=news&id=42", forType: .string)
+        let signedRewrite = URLCleanerHost.pollPasteboard(sinceChangeCount: -1, token: URLCleanerHost.PollToken())
+        suite.expect(signedRewrite?.cleaned?.url == "https://example.com/path?id=42"
+                     && cleanerBoard.string(forType: .string) == "https://example.com/path?id=42"
+                     && cleanerBoard.string(forType: .source) == "com.example.reader",
+                     "the link cleaner's rewrite keeps the app the copy named as its source")
+        cleanerBoard.clearContents()
+        cleanerBoard.setString("https://example.com/path?utm_source=news&id=42", forType: .string)
+        let unsignedRewrite = URLCleanerHost.pollPasteboard(sinceChangeCount: -1, token: URLCleanerHost.PollToken())
+        suite.expect(unsignedRewrite?.cleaned != nil
+                     && cleanerBoard.string(forType: .string) == "https://example.com/path?id=42"
+                     && cleanerBoard.string(forType: .source) == nil,
+                     "a rewritten copy that named no app gains no mark, so the app that copied it is still credited")
+        cleanerBoard.releaseGlobally()
         func expectEqual(_ actual: String, _ expected: String, _ label: String,
                          file: StaticString = #filePath, line: UInt = #line) {
             suite.expect(actual == expected, "\(label): got \(actual), expected \(expected)",
@@ -77,6 +218,97 @@ enum ClipboardFeatureTests {
         suite.expect(ClipboardHistorySearch.rankedIndexes(candidates: clipboardCandidates,
                                                     matching: "missing") == [],
                "clipboard search returns no results for unmatched terms")
+
+        // MARK: Clipboard JSON preview
+
+        let copiedJSON = #"{"b":1.50,"a":[1e3,{},[ ]],"s":"x, {y}: \"z\"","n":null}"#
+        let laidOut = #"""
+        {
+          "b": 1.50,
+          "a": [
+            1e3,
+            {},
+            []
+          ],
+          "s": "x, {y}: \"z\"",
+          "n": null
+        }
+        """#
+        expectEqual(ClipboardJSONFormat.pretty(copiedJSON) ?? "nil", laidOut,
+                    "copied JSON is laid out with its key order, numbers and strings untouched")
+        expectEqual(ClipboardJSONFormat.pretty(laidOut) ?? "nil", laidOut,
+                    "laying out JSON twice changes nothing")
+        suite.expect(ClipboardJSONFormat.pretty(#"{"a": }"#) == nil
+                     && ClipboardJSONFormat.pretty("[1] is the first note") == nil
+                     && ClipboardJSONFormat.pretty("42") == nil,
+                     "text that is not a JSON object or array keeps its own layout")
+
+        let escapedJSON = #"{"path":"C:\\","name":"café 日本","quote":["\\\"",1]}"#
+        let escapedLaidOut = #"""
+        {
+          "path": "C:\\",
+          "name": "café 日本",
+          "quote": [
+            "\\\"",
+            1
+          ]
+        }
+        """#
+        expectEqual(ClipboardJSONFormat.pretty(escapedJSON) ?? "nil", escapedLaidOut,
+                    "a backslash escaped right before a closing quote ends its string, non-ASCII text intact")
+
+        // Where JSONSerialization takes a trailing comma, the layout keeps it
+        // with no empty line before the bracket, whatever the input's breaks.
+        let trailingComma = "{\r\n\t\"a\": 1,\r\n\t\"b\": [\r\n\t\t2,\t\r\n\t],\r\n}"
+        let takesTrailingComma = (try? JSONSerialization.jsonObject(with: Data(trailingComma.utf8))) != nil
+        expectEqual(ClipboardJSONFormat.pretty(trailingComma) ?? "nil",
+                    takesTrailingComma ? "{\n  \"a\": 1,\n  \"b\": [\n    2,\n  ],\n}" : "nil",
+                    "CRLF and tab layout with a trailing comma keeps the comma and leaves no empty line")
+
+        // The limit counts bytes: two-byte letters just past it are too large
+        // even though they are far fewer characters.
+        let letters = (ClipboardJSONFormat.maxBytes - 4) / 2
+        let atByteLimit = "[\"" + String(repeating: "\u{E9}", count: letters) + "\"]"
+        let pastByteLimit = "[\"" + String(repeating: "\u{E9}", count: letters + 1) + "\"]"
+        suite.expect(atByteLimit.utf8.count == ClipboardJSONFormat.maxBytes
+                     && pastByteLimit.count < ClipboardJSONFormat.maxBytes,
+                     "the byte limit fixtures sit at the limit in bytes and far under it in characters")
+        suite.expect(ClipboardJSONFormat.pretty(atByteLimit) != nil,
+                     "JSON right at the byte limit is still laid out")
+        suite.expect(ClipboardJSONFormat.pretty(pastByteLimit) == nil,
+                     "JSON past the byte limit keeps its own layout, however few characters it has")
+
+        // Deep nesting indents every line again, so a small input can lay out
+        // to many times its size.
+        func nestedJSON(_ count: Int) -> String {
+            String(repeating: "[", count: 64) + String(repeating: "1,", count: count) + "1"
+                + String(repeating: "]", count: 64)
+        }
+        suite.expect(ClipboardJSONFormat.pretty(nestedJSON(4_000)) != nil,
+                     "deeply nested JSON whose layout stays under the output bound is laid out")
+        suite.expect(ClipboardJSONFormat.pretty(nestedJSON(12_000)) == nil,
+                     "deeply nested JSON whose layout passes the output bound keeps its own layout")
+
+        // MARK: Clipboard image text recognition
+
+        suite.expect(ClipboardImageRecognition.decodeMaxPixelSize(width: 6_016, height: 3_384) == 6_016,
+                     "a 6K screenshot is read at full size, as Screen OCR reads its capture")
+        let scrollingSide = ClipboardImageRecognition.decodeMaxPixelSize(width: 3_024, height: 20_000)
+        let scrollingPixels = Double(scrollingSide) * Double(scrollingSide) * 3_024 / 20_000
+        suite.expect(scrollingPixels <= Double(ClipboardImageRecognition.maxPixels),
+                     "a picture past the area bound is scaled down to it")
+        suite.expect(scrollingPixels > 0.99 * Double(ClipboardImageRecognition.maxPixels),
+                     "a picture past the area bound keeps nearly all of that area")
+        suite.expect(ClipboardImageRecognition.scaledSize(width: 6_016, height: 3_384) == nil,
+                     "a 6K capture in a screenshot preview is read whole")
+        let longCaptureHeight = ScreenshotSupport.scrollingCaptureMaximumPixels / 3_000
+        let longCapture = ClipboardImageRecognition.scaledSize(width: 3_000, height: longCaptureHeight)
+        let longCapturePixels = (longCapture?.width ?? 0) * (longCapture?.height ?? 0)
+        suite.expect(longCapture?.height == ClipboardImageRecognition.decodeMaxPixelSize(
+                        width: 3_000, height: longCaptureHeight)
+                     && longCapturePixels <= ClipboardImageRecognition.maxPixels
+                     && Double(longCapturePixels) > 0.99 * Double(ClipboardImageRecognition.maxPixels),
+                     "the largest scrolling capture in a preview is scaled to the area bound before recognition")
 
         // MARK: Clipboard history search tokens and highlight ranges
 
@@ -433,6 +665,26 @@ enum ClipboardFeatureTests {
         suite.expect(Defaults.registeredDefaults[DefaultsKey.clipboardHistoryQuickPreview] as? Bool == false,
                "clipboard history quick preview is closed by default")
 
+        // MARK: Clipboard history layout
+
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.clipboardHistoryLayout] as? String
+                        == ClipboardHistoryLayout.list.rawValue,
+               "the clipboard history opens as the list until the cards are chosen")
+        let layoutDefaults = UserDefaults(suiteName: "com.vorssaint.tests.clipboard-layout")!
+        layoutDefaults.removePersistentDomain(forName: "com.vorssaint.tests.clipboard-layout")
+        suite.expect(ClipboardHistoryLayout.current(in: layoutDefaults) == .list,
+               "an unset clipboard history layout reads as the list")
+        layoutDefaults.set(ClipboardHistoryLayout.cards.rawValue, forKey: DefaultsKey.clipboardHistoryLayout)
+        suite.expect(ClipboardHistoryLayout.current(in: layoutDefaults) == .cards,
+               "a chosen cards layout reads back as the cards")
+        layoutDefaults.set("grid", forKey: DefaultsKey.clipboardHistoryLayout)
+        suite.expect(ClipboardHistoryLayout.current(in: layoutDefaults) == .list,
+               "a layout this version does not know reads as the list")
+        layoutDefaults.removePersistentDomain(forName: "com.vorssaint.tests.clipboard-layout")
+        suite.expect(ClipboardHistoryLayout.cards.sideArrowsMoveSelection
+                        && !ClipboardHistoryLayout.list.sideArrowsMoveSelection,
+               "side arrows walk the cards, while the list leaves them to the search field")
+
         // MARK: Clipboard quick window sizing
 
         let desktop = NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -463,6 +715,110 @@ enum ClipboardFeatureTests {
             preview: false, savedWidth: .infinity, savedHeight: -1, visibleFrame: desktop)
                 == compactSize,
                "invalid saved dimensions fall back to the original size")
+        let smallScreen = NSRect(x: -800, y: 0, width: 800, height: 600)
+        suite.expect(ClipboardHistoryWindowSizing.contentSize(
+            preview: true, savedWidth: 0, savedHeight: 0, visibleFrame: smallScreen)
+                == NSSize(width: 768, height: 500),
+               "the preview fits a display narrower than its preferred minimum")
+        let tinyScreen = NSRect(x: 0, y: 0, width: 540, height: 320)
+        suite.expect(ClipboardHistoryWindowSizing.contentSize(
+            preview: true, savedWidth: 1000, savedHeight: 900, visibleFrame: tinyScreen)
+                == NSSize(width: 508, height: 288),
+               "neither minimum dimension can push the window outside the visible display")
+
+        // MARK: Clipboard history window placement
+
+        _ = NSApplication.shared
+        let placement = PanelPlacementHost()
+        let placementDefaults = PanelPlacementHost.UserDefaults.standard
+        placementDefaults.removePersistentDomain(forName: PanelPlacementHost.UserDefaults.name)
+        let placementPanel = NSPanel(contentRect: .zero,
+                                     styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+                                     backing: .buffered, defer: true)
+        let placementScreen = PanelPlacementHost.Screen.pointerVisibleFrame
+        placement.position(placementPanel)
+        suite.expect(!placementPanel.styleMask.contains(.resizable)
+                     && placementPanel.frame == NSRect(x: placementScreen.minX + 16, y: placementScreen.minY + 8,
+                                                       width: placementScreen.width - 32, height: 318),
+               "the cards make a shelf along the bottom of the screen that does not resize")
+        placement.quickLayout = .list
+        placement.position(placementPanel)
+        suite.expect(placementPanel.styleMask.contains(.resizable)
+                     && placementPanel.frame.size == NSSize(width: 560, height: 420)
+                     && abs(placementPanel.frame.midX - placementScreen.midX) < 1,
+               "the list opens as a resizable window at its original size, centered: \(placementPanel.frame)")
+        placementPanel.setFrame(NSRect(origin: placementPanel.frame.origin, size: NSSize(width: 700, height: 500)),
+                                display: false)
+        placement.savePanelSize(placementPanel)
+        placement.position(placementPanel)
+        suite.expect(placementPanel.frame.size == NSSize(width: 700, height: 500),
+               "the list reopens at the size the user gave it")
+        placement.quickPreviewPresented = true
+        placement.position(placementPanel)
+        suite.expect(placementPanel.frame.size == NSSize(width: 980, height: 580),
+               "the preview widens the list's chosen size")
+        placement.quickPreviewPresented = false
+        placement.quickLayout = .cards
+        placement.position(placementPanel)
+        suite.expect(!placementPanel.styleMask.contains(.resizable),
+               "back to the cards after the list, the shelf stops resizing")
+        placement.savePanelSize(placementPanel)
+        placement.quickLayout = .list
+        placement.position(placementPanel)
+        suite.expect(placementPanel.frame.size == NSSize(width: 700, height: 500),
+               "the shelf leaves the list's chosen size alone")
+        var resizeScreen = placementScreen
+        let sizeLimit = ClipboardPanelSizeLimit(minimumContentSize: { placement.panelMinimumContentSize() },
+                                               visibleFrame: { _ in resizeScreen })
+        suite.expect(sizeLimit.windowWillResize(placementPanel, to: NSSize(width: 300, height: 200))
+                        == NSSize(width: 560, height: 300),
+               "resizing the list stops at its minimum")
+        placement.quickPreviewPresented = true
+        suite.expect(sizeLimit.windowWillResize(placementPanel, to: NSSize(width: 300, height: 200))
+                        == NSSize(width: 840, height: 380),
+               "with the preview open, resizing the list stops where the preview still fits")
+        resizeScreen = smallScreen
+        suite.expect(sizeLimit.windowWillResize(placementPanel, to: NSSize(width: 300, height: 200))
+                        == NSSize(width: 768, height: 380)
+                        && sizeLimit.windowWillResize(placementPanel, to: NSSize(width: 1000, height: 900))
+                            == NSSize(width: 768, height: 568),
+               "dragging cannot restore an offscreen minimum or enlarge the list beyond the display")
+        placement.quickLayout = .cards
+        suite.expect(sizeLimit.windowWillResize(placementPanel, to: NSSize(width: 300, height: 200))
+                        == NSSize(width: 300, height: 200),
+               "the shelf sets no minimum")
+        placement.quickPreviewPresented = false
+
+        // Each opening reads the layout again, so a choice made in Settings
+        // applies the next time the window opens.
+        placementDefaults.removeObject(forKey: DefaultsKey.clipboardHistoryLayout)
+        placement.refreshQuickLayout()
+        suite.expect(placement.quickLayout == .list, "an opening with no choice shows the list")
+        placementDefaults.set(ClipboardHistoryLayout.cards.rawValue, forKey: DefaultsKey.clipboardHistoryLayout)
+        placement.refreshQuickLayout()
+        suite.expect(placement.quickLayout == .cards, "an opening after choosing the cards shows the cards")
+        placementDefaults.removePersistentDomain(forName: PanelPlacementHost.UserDefaults.name)
+
+        // MARK: Clipboard history arrow keys
+
+        func step(_ layout: ClipboardHistoryLayout, _ keyCode: Int,
+                  _ modifiers: NSEvent.ModifierFlags = [], key: String? = nil) -> Int? {
+            ClipboardHistoryNavigation.step(keyCode: UInt16(keyCode), modifiers: modifiers, key: key, layout: layout)
+        }
+        for layout in ClipboardHistoryLayout.allCases {
+            suite.expect(step(layout, kVK_DownArrow) == 1 && step(layout, kVK_UpArrow) == -1
+                         && step(layout, kVK_ANSI_N, [.control], key: "n") == 1
+                         && step(layout, kVK_ANSI_P, [.control], key: "p") == -1,
+                   "down, up, Control-N and Control-P move the highlight in the \(layout.rawValue) layout")
+            suite.expect(step(layout, kVK_RightArrow, [.shift]) == nil && step(layout, kVK_LeftArrow, [.option]) == nil
+                         && step(layout, kVK_ANSI_N, key: "n") == nil,
+                   "a side arrow with a modifier, or a plain letter, stays with the search field "
+                       + "in the \(layout.rawValue) layout")
+        }
+        suite.expect(step(.cards, kVK_RightArrow) == 1 && step(.cards, kVK_LeftArrow) == -1,
+               "plain side arrows walk the cards")
+        suite.expect(step(.list, kVK_RightArrow) == nil && step(.list, kVK_LeftArrow) == nil,
+               "the list leaves plain side arrows to the search field's caret")
 
         // MARK: Clipboard menu bar preview
 
@@ -580,6 +936,8 @@ enum ClipboardFeatureTests {
                          "\(language.rawValue) copy-selected button format")
             expectFormat(clipboardStrings.clearRecentConfirmFormat, ["d"],
                          "\(language.rawValue) clear-unpinned confirmation format")
+            expectFormat(FeatureStrings.clipboardRetention(language).daysFormat, ["d"],
+                         "\(language.rawValue) clipboard retention day format")
             suite.expect(!clipboardStrings.autoClearEnable.isEmpty
                    && !clipboardStrings.autoClearSecondsSuffix.isEmpty
                    && !clipboardStrings.autoClearOnSleep.isEmpty
@@ -587,6 +945,11 @@ enum ClipboardFeatureTests {
                    && !clipboardStrings.autoClearOnScreenLock.isEmpty
                    && !clipboardStrings.autoClearCaption.isEmpty,
                    "\(language.rawValue) clipboard auto clear labels are localized")
+            suite.expect(!clipboardStrings.historyLayout.isEmpty
+                   && !clipboardStrings.historyLayoutCards.isEmpty
+                   && !clipboardStrings.historyLayoutList.isEmpty
+                   && clipboardStrings.historyLayoutCards != clipboardStrings.historyLayoutList,
+                   "\(language.rawValue) clipboard history layout choice is localized")
             let layoutStrings = FeatureStrings.windowLayout(language)
             suite.expect(!layoutStrings.sixths.isEmpty
                    && !layoutStrings.topLeftSixth.isEmpty
@@ -763,6 +1126,15 @@ enum ClipboardFeatureTests {
         suite.expect(largeClipboardPreview.hasSuffix("…")
                 && largeClipboardPreview.count <= ClipboardHistoryEditing.previewCharacters + 1,
                "clipboard rows keep very large text previews bounded")
+        let snippet = ClipboardHistoryEntry(text: "func run() {\n\treturn\n}")
+        expectEqual(snippet.cardPreview, "func run() {\n return\n}",
+                    "a card keeps a snippet's line breaks and turns its tabs into spaces")
+        expectEqual(snippet.preview, "func run() {  return }",
+                    "the one-line preview other lists show still folds line breaks")
+        let largeCardPreview = ClipboardHistoryEntry(text: largeClipboardText).cardPreview
+        suite.expect(largeCardPreview.hasSuffix("…")
+                && largeCardPreview.count <= ClipboardHistoryEditing.previewCharacters + 1,
+               "a card keeps very large text previews bounded too")
         suite.expect(Defaults.allowedClipboardHistoryLimits == [20, 50, 100, 250, 500, 1_000, 10_000, 0],
                "clipboard history limits include 10k and unlimited options")
         suite.expect(Defaults.sanitizedClipboardHistoryLimit(10_000) == 10_000
@@ -782,6 +1154,70 @@ enum ClipboardFeatureTests {
             textByteLimit: 1_000)
         suite.expect(tenThousandHistory.count == 2,
                "clipboard history retainedEntries preserves entries with 10_000 limit")
+        let retentionNow = Date(timeIntervalSince1970: 1_000_000_000)
+        let freshRecent = ClipboardHistoryEntry(text: "fresh",
+                                                copiedAt: retentionNow.addingTimeInterval(-86_400))
+        let staleRecent = ClipboardHistoryEntry(text: "stale",
+                                                copiedAt: retentionNow.addingTimeInterval(-8 * 86_400))
+        let stalePinned = ClipboardHistoryEntry(text: "old pin",
+                                                copiedAt: retentionNow.addingTimeInterval(-400 * 86_400),
+                                                pinnedAt: retentionNow.addingTimeInterval(-400 * 86_400))
+        let weekHistory = ClipboardHistoryEditing.retainedEntries(
+            [stalePinned, freshRecent, staleRecent],
+            recentLimit: 0,
+            retentionDays: 7,
+            now: retentionNow)
+        suite.expect(weekHistory.map(\.id) == [stalePinned.id, freshRecent.id],
+               "clipboard history drops recent entries older than the retention days but keeps pinned ones")
+        let foreverHistory = ClipboardHistoryEditing.retainedEntries(
+            [freshRecent, staleRecent],
+            recentLimit: 0,
+            retentionDays: 0,
+            now: retentionNow)
+        suite.expect(foreverHistory.count == 2,
+               "clipboard history keeps entries of any age when retention is 0 (forever)")
+        let limitAndRetention = ClipboardHistoryEditing.retainedEntries(
+            [freshRecent, staleRecent],
+            recentLimit: 20,
+            retentionDays: 30,
+            now: retentionNow)
+        suite.expect(limitAndRetention.count == 2,
+               "clipboard history keeps entries that are inside both the limit and the retention window")
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.clipboardHistoryRetentionDays] as? Int == 0
+                && Defaults.sanitizedClipboardHistoryRetentionDays(30) == 30
+                && Defaults.sanitizedClipboardHistoryRetentionDays(0) == 0
+                && Defaults.sanitizedClipboardHistoryRetentionDays(12) == 0,
+               "clipboard history retention defaults to forever and only accepts the offered day counts")
+        let retentionLabels = FeatureStrings.clipboardRetention(.enUS)
+        suite.expect(retentionLabels.label(days: 0) == "Forever"
+                && retentionLabels.label(days: 1) == "1 day"
+                && retentionLabels.label(days: 30) == "30 days",
+               "clipboard history retention labels name forever, one day and several days")
+        let unpinnedOld = ClipboardHistoryEditing.unpinned(stalePinned, now: retentionNow)
+        let afterUnpin = ClipboardHistoryEditing.retainedEntries(
+            [freshRecent, unpinnedOld, staleRecent],
+            recentLimit: 0,
+            retentionDays: 7,
+            now: retentionNow)
+        suite.expect(!unpinnedOld.isPinned
+                && afterUnpin.contains { $0.id == stalePinned.id }
+                && !afterUnpin.contains { $0.id == staleRecent.id },
+               "unpinning an item older than the retention window keeps it as a just-used recent entry")
+        let duringEdit = ClipboardHistoryEditing.retainedEntries(
+            [freshRecent, staleRecent],
+            recentLimit: 0,
+            retentionDays: 7,
+            ageExemptIDs: [staleRecent.id],
+            now: retentionNow)
+        suite.expect(duringEdit.map(\.id) == [freshRecent.id, staleRecent.id],
+               "an entry open in the editor does not expire while its draft is unsaved")
+        let afterEdit = ClipboardHistoryEditing.retainedEntries(
+            duringEdit,
+            recentLimit: 0,
+            retentionDays: 7,
+            now: retentionNow)
+        suite.expect(afterEdit.map(\.id) == [freshRecent.id],
+               "an expired entry is dropped on the first trim after the editor lets it go")
         let previewID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
         let nextPreviewID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
         let updatedPreview = ClipboardHistoryEntry(id: previewID, text: "updated")
@@ -837,19 +1273,22 @@ enum ClipboardFeatureTests {
         [{"text":"hello","copiedAt":700000000}]
         """.utf8)
         if let legacy = try? JSONDecoder().decode([ClipboardHistoryEntry].self, from: legacyClipboardJSON) {
-            suite.expect(legacy.count == 1 && legacy[0].kind == .text && legacy[0].text == "hello",
-                   "clipboard histories saved before images and files decode as text")
+            suite.expect(legacy.count == 1 && legacy[0].kind == .text && legacy[0].text == "hello"
+                   && legacy[0].sourceBundleID == nil,
+                   "clipboard histories saved before images, files and source apps decode as text")
         } else {
             suite.expect(false, "clipboard legacy history decodes")
         }
         var editedTextEntry = ClipboardHistoryEntry(text: "before", pinnedAt: Date(timeIntervalSince1970: 42))
+        editedTextEntry.sourceBundleID = "com.apple.TextEdit"
         editedTextEntry.text = ClipboardHistoryEditing.storableText("after") ?? editedTextEntry.text
         if let encoded = try? JSONEncoder().encode([editedTextEntry]),
            let decoded = try? JSONDecoder().decode([ClipboardHistoryEntry].self, from: encoded) {
             suite.expect(decoded.first?.id == editedTextEntry.id
                    && decoded.first?.text == "after"
-                   && decoded.first?.pinnedAt == editedTextEntry.pinnedAt,
-                   "clipboard text edits persist without losing item identity or pinning")
+                   && decoded.first?.pinnedAt == editedTextEntry.pinnedAt
+                   && decoded.first?.sourceBundleID == "com.apple.TextEdit",
+                   "clipboard text edits persist without losing item identity, pinning or source app")
         } else {
             suite.expect(false, "clipboard text edit round-trips")
         }
@@ -930,7 +1369,68 @@ enum ClipboardFeatureTests {
         suite.expect(!ClipboardHistorySensitiveText.looksSensitive("http://localhost:3000/page"),
                "clipboard history does not treat normal web URLs as secrets")
         suite.expect(ClipboardHistorySensitiveText.looksSensitive("https://example.com/callback?token=abc"),
-               "clipboard history still skips URLs with obvious secret words")
+               "clipboard history still skips URLs containing a credential value")
+        for text in [
+            "echo password",
+            "security find-generic-password -h",
+            "grep -R token Sources",
+            "Error: unexpected token near ')'",
+            "Authorization failed. Please sign in again.",
+            "This command prints the secret name, not its value.",
+            "let tokenCount = 42\nprint(tokenCount)",
+            "password",
+            "tokenizer",
+            "/etc/passwd",
+            "https://example.com/docs/token-authentication",
+            "https://example.com/password/reset",
+            "TOKEN=",
+            "TOKEN=\"\"",
+            "{\"password\": \"\"}",
+            "TOKEN=\nordinary output on the next line",
+            "command --token",
+            "command --password ''",
+            "max_tokens = 4096",
+            "token_count: 5",
+            "tokens_used: 1234",
+            "password_reset_url: https://example.com",
+            "passwordless: true",
+            "command --token-count 5"
+        ] {
+            suite.expect(!ClipboardHistorySensitiveText.looksSensitive(text),
+                         "clipboard history keeps ordinary terminal text: \(text)")
+        }
+        for text in [
+            "password=hunter2",
+            "PASSWORD = hunter2",
+            "export GITHUB_TOKEN=exampleCredential",
+            "client_secret: exampleCredential",
+            "api_key=exampleCredential",
+            "apiKey: exampleCredential",
+            "sessionToken=exampleCredential",
+            "command --password hunter2",
+            "command --access-token 'example credential'",
+            "command --api-key exampleCredential",
+            "{\"password\": \"example credential\"}",
+            "Authorization: Bearer exampleCredential",
+            "curl -H 'Authorization: Bearer exampleCredential' https://example.com",
+            "ordinary output\nexport ACCESS_TOKEN=exampleCredential\nmore output",
+            "🔐 export ACCESS_TOKEN=exampleCredential",
+            "https://example.com/callback?access_token=exampleCredential",
+            "aws_secret_access_key = exampleCredential/Value",
+            "SECRET_KEY = 'example-credential'",
+            "{\"secretKey\": \"exampleCredential\"}",
+            "STRIPE_SECRET_KEY=exampleCredential",
+            "JWT_SECRET_KEY: exampleCredential",
+            "password_confirmation: hunter2",
+            "PASSWORD2 = hunter2",
+            "PASSWORD_2: hunter2",
+            "SECRET_KEY_BASE=exampleCredential",
+            "private_key = exampleCredential",
+            "command --secret-key exampleCredential"
+        ] {
+            suite.expect(ClipboardHistorySensitiveText.looksSensitive(text),
+                         "clipboard history still excludes credential assignments and headers: \(text)")
+        }
         suite.expect(ClipboardHistorySensitiveText.looksSensitive("abc1234567890-xyz-abc"),
                "clipboard history still skips compact secret-looking text")
         // Issue #423: an identifier code is ordinary content to copy around,
@@ -958,6 +1458,15 @@ enum ClipboardFeatureTests {
         expectEqual(ClipboardHistorySensitiveText.concealedPasteboardType,
                     "org.nspasteboard.ConcealedType",
                     "the secret mark keeps the exact name the apps that write it use")
+        // A dictation app marks the text it pastes and then takes back.
+        suite.expect(ClipboardHistorySensitiveText.isTransient(["public.utf8-plain-text",
+                                                          "org.nspasteboard.TransientType"]),
+               "clipboard history leaves out content its app is about to take back")
+        suite.expect(ClipboardHistorySensitiveText.isTransient(["org.nspasteboard.AutoGeneratedType"]),
+               "clipboard history leaves out content an app made up rather than copied")
+        suite.expect(!ClipboardHistorySensitiveText.isTransient(["public.utf8-plain-text",
+                                                           "NSStringPboardType"]),
+               "ordinary copied text is not a paste about to be taken back")
 
         // MARK: Separated link copies
 
@@ -1088,6 +1597,9 @@ enum ClipboardFeatureTests {
                         < (hideBody.range(of: "orderOut")?.lowerBound ?? hideBody.startIndex)
                      && historySource.contains("event.window === panel, panel.attachedSheet == nil"),
                "the history window ends an open confirmation before hiding and leaves its keys to it")
+        suite.expect((hideBody.range(of: "captureIfChanged(historyPanelClosing: true)")?.lowerBound ?? hideBody.endIndex)
+                        < (hideBody.range(of: "orderOut")?.lowerBound ?? hideBody.startIndex),
+               "the history window reads a copy made in it as its own before it leaves the screen")
         let panelClipboardSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/UI/MenuPanel/PanelClipboardView.swift",
             encoding: .utf8)) ?? ""
@@ -1142,6 +1654,20 @@ enum ClipboardPreviewContract {
         var keyboardSelectionPointer: NSPoint?
         enum NSCursor { static func setHiddenUntilMouseMoves(_ hidden: Bool) {} }
         enum NSEvent { static let mouseLocation = NSPoint.zero }
+        enum UserDefaults {
+            struct Preferences {
+                var skipSensitive = Defaults.registeredDefaults[
+                    DefaultsKey.clipboardHistoryFilterSensitiveText] as? Bool ?? true
+                func bool(forKey key: String) -> Bool {
+                    key == DefaultsKey.clipboardHistoryFilterSensitiveText && skipSensitive
+                }
+            }
+            static var standard = Preferences()
+        }
+        let capturedEntry = PassthroughSubject<ClipboardHistoryEntry, Never>()
+        func looksSensitive(_ text: String) -> Bool {
+            ClipboardHistorySensitiveText.looksSensitive(text)
+        }
     }
 
     static func run(_ suite: TestSuite) {
@@ -1263,9 +1789,20 @@ enum ClipboardPreviewContract {
         var pinnedLater = ClipboardHistoryEntry(text: "Pinned while the confirmation was open")
         pinnedLater.pinnedAt = Date()
         service.setEntries([pinnedLater, copiedLater, counted])
-        service.clearRecent([counted.id, pinnedLater.id])
+        service.clearRecent([counted.id: counted.copiedAt, pinnedLater.id: pinnedLater.copiedAt])
         suite.expect(service.entries.map(\.id) == [pinnedLater.id, copiedLater.id],
                      "clearing deletes only the unpinned items the confirmation counted")
+        let recopied = ClipboardHistoryEntry(text: "Counted, then copied again while the confirmation was open",
+                                             copiedAt: Date(timeIntervalSinceNow: -60))
+        let stillCounted = ClipboardHistoryEntry(text: "Counted and left alone")
+        service.setEntries([recopied, stillCounted])
+        let confirmed = service.recentEntriesSnapshot
+        var copiedAgain = recopied
+        copiedAgain.copiedAt = Date()
+        service.setEntries([copiedAgain, stillCounted])
+        service.clearRecent(confirmed)
+        suite.expect(confirmed.count == 2 && service.entries.map(\.id) == [recopied.id],
+                     "an entry copied again while the confirmation is open survives the clear")
 
         var pinnedItem = ClipboardHistoryEntry(text: "Candidate Alpha")
         pinnedItem.pinnedAt = Date()
@@ -1345,6 +1882,61 @@ enum ClipboardPreviewContract {
         suite.expect(service.searchCache.foldCount == foldsAtStart + 4, "only the edited entry refolds")
         searchFolding(suite)
         quickSelection(suite)
+        promotedSource(suite)
+        sensitiveText(suite)
+    }
+
+    private static func sensitiveText(_ suite: TestSuite) {
+        let defaultService = Service()
+        for text in [
+            "export GITHUB_TOKEN=exampleCredential",
+            "/Users/example/project2026/package.json",
+            "abc1234567890-xyz-abc",
+            "Error: unexpected token near ')'"
+        ] {
+            defaultService.promote(text, source: "com.mitchellh.ghostty", keepsSource: false)
+            suite.expect(defaultService.entries.first?.text == text,
+                         "production history records unmarked terminal text by default: \(text)")
+        }
+        Fixture.UserDefaults.standard.skipSensitive = true
+        defer { Fixture.UserDefaults.standard.skipSensitive = false }
+        let service = Service()
+        let terminalText = "Error: unexpected token near ')'"
+        let terminalApp = "com.mitchellh.ghostty"
+        service.promote(terminalText, source: terminalApp, keepsSource: false)
+        suite.expect(service.entries.map(\.text) == [terminalText]
+                     && service.latestPasteboardEntry?.sourceBundleID == terminalApp,
+                     "production history saves ordinary terminal output with the sensitive filter enabled")
+        let credential = "export GITHUB_TOKEN=exampleCredential"
+        service.promote(credential, source: terminalApp, keepsSource: false)
+        suite.expect(service.entries.map(\.text) == [terminalText],
+                     "production history still excludes a terminal credential with the filter enabled")
+        Fixture.UserDefaults.standard.skipSensitive = false
+        service.promote(credential, source: terminalApp, keepsSource: false)
+        suite.expect(service.entries.map(\.text) == [credential, terminalText],
+                     "disabling the sensitive text heuristic still permits unmarked credential text")
+    }
+
+    /// A copy taken out of the history's own panel is of an entry already
+    /// there, so it must not take away the app that entry shows.
+    private static func promotedSource(_ suite: TestSuite) {
+        let service = Service()
+        var fromEditor = ClipboardHistoryEntry(text: "Copied in an editor")
+        fromEditor.sourceBundleID = "com.example.editor"
+        let other = ClipboardHistoryEntry(text: "Another copy")
+        service.setEntries([other, fromEditor])
+        service.promote("Copied in an editor", source: nil, keepsSource: true)
+        suite.expect(service.entries.map(\.id) == [fromEditor.id, other.id]
+                     && service.entries.first?.sourceBundleID == "com.example.editor",
+                     "an entry copied again out of the history panel moves up and keeps the app it came from")
+        service.promote("Copied in an editor", source: "com.example.browser", keepsSource: false)
+        suite.expect(service.entries.first?.id == fromEditor.id
+                     && service.entries.first?.sourceBundleID == "com.example.browser",
+                     "an entry copied again in another app takes the app that copied it this time")
+        service.promote("Part of an entry", source: nil, keepsSource: true)
+        suite.expect(service.entries.first?.text == "Part of an entry"
+                     && service.entries.first?.sourceBundleID == nil,
+                     "new text copied out of the history panel names no app")
     }
 
     /// The window's highlight is what Return pastes, so it has to stay on the

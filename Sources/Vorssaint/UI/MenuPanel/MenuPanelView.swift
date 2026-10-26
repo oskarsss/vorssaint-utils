@@ -153,7 +153,7 @@ struct MenuPanelView: View {
         case .system: return SystemMonitorPanelNeeds(system: true)
         case .network: return SystemMonitorPanelNeeds(network: true)
         case .disk: return SystemMonitorPanelNeeds(disk: true)
-        case .power: return SystemMonitorPanelNeeds(power: true)
+        case .power: return SystemMonitorPanelNeeds(power: true, powerCard: true)
         default: return .none
         }
     }
@@ -327,7 +327,13 @@ struct MenuPanelView: View {
         case .keepAwake: KeepAwakeCard(collapsible: collapsible)
         case .brightness: if showBrightness { BrightnessSection(collapsible: collapsible) }
         case .mixer: if showMixer { mixerOrPrioritySection(collapsible: collapsible) }
-        case .system: if showSystem { SystemSection(collapsible: collapsible) }
+        case .system:
+            if showSystem {
+                SystemSection(collapsible: collapsible) {
+                    focusedSection = nil
+                    selectedMetric = .connectedDevices
+                }
+            }
         case .network: if showNetwork { NetworkSection(collapsible: collapsible) }
         case .disk: if showDisk { DiskSection(collapsible: collapsible) }
         case .power: if showPower { PowerSection(collapsible: collapsible) }
@@ -1795,11 +1801,20 @@ struct QuickControlsSection: View {
         case .superKey:
             let superKeyStrings = FeatureStrings.superKey(l10n.language)
             let superKeySource = SuperKeySource.sanitized(superKeySourceRaw)
+            let keyCaps = SuperKeySupport.modifiers(from: superKeyModifierStorage).keyCaps.joined()
             let modifierCaption = String(
                 format: superKeyStrings.panelCaptionFormat,
                 superKeyStrings.sourceLabel(superKeySource),
-                SuperKeySupport.modifiers(from: superKeyModifierStorage).keyCaps.joined()
+                keyCaps
             )
+            // Issue #2896: while the key is on with Accessibility, the
+            // Settings link names the mapping. Only the key and its key caps,
+            // because the sentence gets cut in a mini button at the panel
+            // width in several languages (in Italian the cut hides the key
+            // caps). Without Accessibility nothing is mapped yet, so the link
+            // keeps Set up… beside the warning, and a switched-off row shows
+            // no link, like Text Snippets, Radial Menu and Mouse buttons.
+            let mappingLabel = "\(superKeyStrings.sourceLabel(superKeySource)) \(keyCaps)"
             PanelToggleRow(title: superKeyStrings.pageTitle,
                            caption: caption(modifierCaption,
                                             needsAccessibility: superKeyEnabled),
@@ -1811,7 +1826,9 @@ struct QuickControlsSection: View {
                            needsAttention: superKeyEnabled && !permissions.accessibility,
                            permissionButtonTitle: l10n.s.permissionRequest,
                            permissionAction: accessibilityPermissionAction(superKeyEnabled),
-                           accessoryTitle: superKeyEnabled ? superKeyStrings.manageButton : nil,
+                           accessoryTitle: superKeyEnabled
+                               ? (permissions.accessibility ? mappingLabel : superKeyStrings.manageButton)
+                               : nil,
                            accessoryAction: {
                                SettingsRouter.shared.page = .superKey
                                appDelegate()?.openSettingsWindow()

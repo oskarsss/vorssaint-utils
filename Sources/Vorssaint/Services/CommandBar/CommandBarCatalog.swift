@@ -389,7 +389,7 @@ enum CommandBarCatalog {
                     : .needsSetup(featureTitle: clipboard.title, page: .clipboard),
                 run: { _ in afterBeat(0.1) { ClipboardHistoryService.shared.showHistoryWindow() } }))
             // Counted when the bar lists it: a copy made before confirming is kept.
-            let recentIDs = Set(ClipboardHistoryService.shared.recentEntries.map(\.id))
+            let recentIDs = ClipboardHistoryService.shared.recentEntriesSnapshot
             entries.append(CommandBarEntry(
                 id: "action.clipboardClearRecent",
                 title: clipboard.clearRecent,
@@ -985,7 +985,7 @@ enum CommandBarCatalog {
                 id: "app.\(app.id)",
                 // Two copies of one app need two rows, so the row is keyed by
                 // where it lives; what the person named stays with the app.
-                stableKey: app.bundleID.map { "app.bundle.\($0)" } ?? "app.\(app.id)",
+                stableKey: CommandBarRowShortcuts.appKey(bundleID: app.bundleID, path: app.id),
                 title: app.name,
                 subtitle: bar.kindApp,
                 keywords: keywords,
@@ -1317,6 +1317,7 @@ enum CommandBarCatalog {
     private static func copyAnswer(_ value: String) {
         GeneralPasteboardAccess.shared.async({
             NSPasteboard.general.clearContents()
+            NSPasteboard.general.declareVorssaintSource()
             return NSPasteboard.general.setString(value, forType: .string)
         }, then: { copied in
             QuickToolHUD.show(icon: copied ? "doc.on.doc" : "exclamationmark.circle",
@@ -1465,6 +1466,10 @@ enum CommandBarCatalog {
     /// Return pressed before a script's debounced run has answered yet: runs
     /// at once instead of waiting, and leaves the bar open the way a search
     /// does, since there is nothing to copy until the row shows an answer.
+    /// A row reached by part of its name never shows one, and neither does a
+    /// search inside a category, so that run copies its own answer and closes
+    /// the bar once it lands, unless the person has typed on or the bar has
+    /// moved on to something else in the meantime.
     private static func runScript(_ link: CommandBarLink) {
         let service = CommandBarService.shared
         let typed = service.queryWhenRun.trimmingCharacters(in: .whitespaces)
@@ -1480,7 +1485,26 @@ enum CommandBarCatalog {
             service.hide()
             return
         }
-        service.scriptRunner.runNow(link: link, argument: argument)
+        let savedLinks = CommandBarLinks.decode(
+            UserDefaults.standard.data(forKey: DefaultsKey.commandBarLinks))
+        guard service.activeCategory != nil
+                || !CommandBarLinks.queryShowsAnswer(for: link, argument: argument,
+                                                     query: typed, in: savedLinks) else {
+            service.scriptRunner.runNow(link: link, argument: argument)
+            return
+        }
+        let queryWhenActivated = service.query
+        let categoryWhenActivated = service.activeCategory
+        service.scriptRunner.runNow(link: link, argument: argument) { result in
+            // Opening a category or a row's actions, or being asked for a
+            // name or a value, can leave the field as it was, so the field
+            // alone cannot tell that the bar has moved on.
+            guard case .search = service.mode,
+                  service.activeCategory == categoryWhenActivated,
+                  service.query == queryWhenActivated else { return }
+            copyAnswer(result.text)
+            service.hide()
+        }
     }
 
     /// The row a saved script shows once it has answered: the same shape as
@@ -1506,7 +1530,15 @@ enum CommandBarCatalog {
     ///
     /// Everything here is offered only when it would actually do something —
     /// a link row only for a link, a case row only when the case would change.
+    ///
+    /// `text` is the trimmed selection. `exactly` is the selection as the app
+    /// holds it, with its spaces and line breaks. The case rows type over that
+    /// selection, so they change `exactly` and keep those spaces and breaks.
+    /// `typesOver` is false where typed letters would not reach the selection;
+    /// then the case rows are not offered.
     static func selectionEntries(_ text: String,
+                                 exactly selected: String? = nil,
+                                 typesOver: Bool = true,
                                  bar: CommandBarFeatureStrings,
                                  useInSearch: @escaping (String) -> Void) -> [CommandBarEntry] {
         guard !text.isEmpty else { return [] }
@@ -1550,7 +1582,8 @@ enum CommandBarCatalog {
 
         // Retyping a whole document would be slower than doing it by hand, and
         // the case rows only earn their place when the case would change.
-        if text.count <= 5_000 {
+        let replacement = selected ?? text
+        if typesOver, replacement.count <= 5_000 {
             let cases: [(String, String, String, (String) -> String)] = [
                 ("selection.upper", bar.selectionUpper, "textformat.size.larger",
                  { $0.localizedUppercase }),
@@ -1567,7 +1600,7 @@ enum CommandBarCatalog {
                     subtitle: kind,
                     icon: .symbol(symbol),
                     trouble: Permissions.shared.accessibility ? nil : .needsPermission,
-                    run: { _ in typeAtCursor(transform(text)) }))
+                    run: { _ in typeAtCursor(transform(replacement)) }))
             }
         }
 
