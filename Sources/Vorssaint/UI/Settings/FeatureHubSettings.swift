@@ -1147,6 +1147,7 @@ extension AppFeature {
         case .quitWindowProtection: return FeatureStrings.quitProtection(language).name
         case .scrollInverter: return s.invertMouseScroll
         case .scrollHorizontal: return s.scrollHorizontalName
+        case .scrollZoom: return s.zoomSection
         case .focusFollowsMouse: return s.focusFollowsMouseName
         case .smoothScroll: return s.smoothScrollName
         case .linearScroll: return s.linearScrollName
@@ -1179,6 +1180,7 @@ extension AppFeature {
         case .bluetoothSleep: return FeatureStrings.bluetoothSleep(language).pageTitle
         case .quickLauncher: return s.launcherName
         case .quickToggles: return FeatureStrings.quickToggles(language).pageTitle
+        case .quitApps: return s.quitAppsName
         case .colorPicker: return s.colorPickerName
         case .screenOCR: return s.ocrName
         case .screenshot: return FeatureStrings.screenshot(language).pageTitle
@@ -1232,6 +1234,7 @@ extension AppFeature {
         case .quitWindowProtection: return FeatureStrings.quitProtection(L10n.shared.language).description
         case .scrollInverter: return hub.descScrollInverter
         case .scrollHorizontal: return L10n.shared.s.scrollHorizontalCaption
+        case .scrollZoom: return L10n.shared.s.pinchZoom
         case .focusFollowsMouse: return L10n.shared.s.focusFollowsMouseCaption
         case .smoothScroll: return hub.descSmoothScroll
         case .linearScroll: return L10n.shared.s.linearScrollCaption
@@ -1264,6 +1267,7 @@ extension AppFeature {
         case .bluetoothSleep: return FeatureStrings.bluetoothSleep(L10n.shared.language).hubDescription
         case .quickLauncher: return hub.descQuickLauncher
         case .quickToggles: return FeatureStrings.quickToggles(L10n.shared.language).hubDescription
+        case .quitApps: return L10n.shared.s.quitAppsCaption
         case .colorPicker: return hub.descColorPicker
         case .screenOCR: return hub.descScreenOCR
         case .screenshot: return FeatureStrings.screenshot(L10n.shared.language).hubDescription
