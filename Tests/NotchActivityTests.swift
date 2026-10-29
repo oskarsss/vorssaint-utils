@@ -19,6 +19,7 @@ enum NotchActivityTests {
         compactDownloadContracts(suite)
         keepAwakeContracts(suite)
         accessoryContracts(suite)
+        NotchAccessoryConnectionTests.run(suite)
         PeripheralBatteryLifecycleTests.run(suite)
         gateContracts(suite)
     }
@@ -596,8 +597,9 @@ enum NotchActivityTests {
         }
         func band(_ geometry: NotchGeometry) -> NotchBand { NotchBand(geometry: geometry, contentWidth: geometry.contentWidth) }
         let compact = page(camera: 180, .compact, sectionsButton: false)
+        let wrapped: CGFloat = max(NotchLayout.timerContentWidth, 180 + compact.pageBandSide * 2)
         suite.expect(band(compact).besideCamera && compact.pageContentWidth == NotchLayout.timerContentWidth
-               && compact.contentWidth == max(NotchLayout.timerContentWidth, 180 + compact.pageBandSide * 2)
+               && compact.contentWidth == wrapped
                && band(compact).side == compact.pageBandSide - NotchBand.cameraClearance
                && chevron > 0 && glyph > 0,
                "the timer's row wraps a 180-point camera on a page no wider than its own: \(band(compact).side)")
@@ -679,8 +681,33 @@ enum NotchActivityTests {
         }
         for minute in [1, 15, 90, 180] {
             suite.expect(NotchTimerRulerScale.offset(of: minute, selected: minute) == 0,
-                   "the chosen minute stays under the center pointer, including the initial value and both endpoints")
+                   "the chosen minute stays under the pointer, including the initial value and both endpoints")
         }
+        for width in [96.0, 180, 300, 560] {
+            var filled = true
+            var selectedVisible = true
+            var clicksMatch = true
+            for selected in 1...180 {
+                let pointer = NotchTimerRulerScale.selectionX(selected: selected, width: width)
+                let first = pointer + NotchTimerRulerScale.offset(of: 1, selected: selected)
+                let last = pointer + NotchTimerRulerScale.offset(of: 180, selected: selected)
+                filled = filled && first <= 24 && last >= width - 24
+                selectedVisible = selectedVisible && pointer >= 24 && pointer <= width - 24
+                for minute in 1...180 {
+                    let x = pointer + NotchTimerRulerScale.offset(of: minute, selected: selected)
+                    guard (0...width).contains(x) else { continue }
+                    let clicked = NotchTimerRulerScale.moving(Double(selected), by: -(x - pointer))
+                    clicksMatch = clicksMatch && NotchTimerRulerScale.minute(clicked) == minute
+                }
+            }
+            suite.expect(filled, "the timer ruler fills its width near both limits without an empty half at \(width) points")
+            suite.expect(selectedVisible, "every selected minute stays visible with room for its label at \(width) points")
+            suite.expect(clicksMatch, "visible ruler ticks select their own minute even when the pointer leaves the center at \(width) points")
+        }
+        suite.expect(NotchTimerRulerScale.selectionX(selected: 5, width: 300) == 80
+               && NotchTimerRulerScale.selectionX(selected: 90, width: 300) == 150
+               && NotchTimerRulerScale.selectionX(selected: 180, width: 300) == 276,
+               "short durations start near the leading edge, middle durations stay centered and the maximum reaches the trailing edge")
         suite.expect(NotchTimerRulerScale.minute(NotchTimerRulerScale.moving(15, by: 14)) == 14
                && NotchTimerRulerScale.minute(NotchTimerRulerScale.moving(15, by: -14)) == 16,
                "dragging the ruler by one tick changes one minute in the matching direction")

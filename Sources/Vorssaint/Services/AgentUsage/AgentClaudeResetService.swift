@@ -58,7 +58,7 @@ final class AgentClaudeResetService: ObservableObject {
     }
 
     func refresh() {
-        guard !checking, !redeeming else { return }
+        guard ClaudeAccountProfile.selected().isDefault, !checking, !redeeming else { return }
         if case .busy(let until)? = failure, Date() < until { return }
         checking = true
         attempted = Date()
@@ -85,7 +85,7 @@ final class AgentClaudeResetService: ObservableObject {
     /// Uses a reset of the grant the account offers next, or tries the use
     /// that went unanswered again.
     func redeem() {
-        guard !redeeming, !checking, let grant = summary?.usable else { return }
+        guard ClaudeAccountProfile.selected().isDefault, !redeeming, !checking, let grant = summary?.usable else { return }
         redeeming = true
         let now = Date()
         let attempt = pending.flatMap { now.timeIntervalSince($0.date) < Self.retryWindow && $0.grant == grant.id ? $0 : nil }
@@ -133,7 +133,8 @@ final class AgentClaudeResetService: ObservableObject {
         failure = nil
         attempted = summary.checkedAt
         // Limits of an account Claude Code no longer signs in to are not this one's.
-        if let limits = summary.limits, organization == AgentClaudeServer.organization(home: home) {
+        if ClaudeAccountProfile.selected().isDefault, let limits = summary.limits,
+           organization == ClaudeAccountProfile().read(home: home).identity?.organization {
             AgentUsageService.shared.noteLimits(limits)
         }
     }
@@ -187,7 +188,7 @@ final class AgentClaudeResetService: ObservableObject {
         }
         guard credentials.readsUsage else { return .failure(.needsSignIn) }
         return .success(Prepared(credentials: credentials, version: version,
-                                 organization: AgentClaudeServer.organization(home: home),
+                                 organization: ClaudeAccountProfile().read(home: home).identity?.organization,
                                  known: (executable, modified, version)))
     }
 }
